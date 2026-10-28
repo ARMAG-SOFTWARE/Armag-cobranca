@@ -7,8 +7,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { InstallmentStatusBadge } from "@/components/status-badge";
 import { RegisterPaymentDialog } from "@/components/register-payment-dialog";
-import { type Client, type Contract, type Installment } from "@/lib/types";
+import { type Client, type Contract, type Installment, type WhatsAppOpenMode } from "@/lib/types";
 import { cn, formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
+import { openWhatsAppUrl } from "@/lib/whatsapp-open";
 import { buildWhatsAppReminderLink } from "@/lib/whatsapp-reminder-link";
 import { markReminderOpened } from "@/app/actions";
 
@@ -28,10 +29,12 @@ function InstallmentRow({
   installment,
   contract,
   client,
+  whatsappOpenMode,
 }: {
   installment: Installment;
   contract: ReminderContract;
   client: ReminderClient;
+  whatsappOpenMode: WhatsAppOpenMode;
 }) {
   const router = useRouter();
 
@@ -39,13 +42,13 @@ function InstallmentRow({
     // Monta o link e abre o WhatsApp de forma síncrona, na mesma interação
     // de clique — qualquer `await` antes do `window.open` faz o navegador
     // tratar a nova aba como pop-up e bloqueá-la.
-    const result = buildWhatsAppReminderLink(client, contract, installment);
+    const result = buildWhatsAppReminderLink(client, contract, installment, whatsappOpenMode);
     if (!result.ok) {
       toast.error(result.error);
       return;
     }
 
-    window.open(result.url, "_blank", "noopener,noreferrer");
+    openWhatsAppUrl(result.url);
     toast.success("WhatsApp aberto com a mensagem preenchida. Confira e envie por lá.");
 
     // Best-effort: só registra que o lembrete foi iniciado (não comprova
@@ -112,15 +115,23 @@ export function InstallmentsGrid({
   installments,
   contract,
   client,
+  whatsappOpenMode = "padrao",
 }: {
   installments: Installment[];
   contract: ReminderContract;
   client: ReminderClient;
+  whatsappOpenMode?: WhatsAppOpenMode;
 }) {
   return (
     <div className="flex flex-col gap-3">
       {installments.map((installment) => (
-        <InstallmentRow key={installment.id} installment={installment} contract={contract} client={client} />
+        <InstallmentRow
+          key={installment.id}
+          installment={installment}
+          contract={contract}
+          client={client}
+          whatsappOpenMode={whatsappOpenMode}
+        />
       ))}
     </div>
   );

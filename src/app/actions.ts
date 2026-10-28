@@ -21,6 +21,7 @@ import {
   type SettlementInstallmentInput,
 } from "@/lib/financial-rules";
 import {
+  businessSettingsSchema,
   messageSettingsSchema,
   transactionSchema,
   paymentSchema,
@@ -39,6 +40,7 @@ import {
   type ClientInfoInput,
   type ContractDisbursementInput,
   type SettleContractInput,
+  type BusinessSettingsInput,
 } from "@/lib/validations";
 import type { ContractStatus, ContractType, InstallmentStatus, WeeklyChargeStatus } from "@/lib/types";
 import { formatCurrency, onlyDigits } from "@/lib/utils";
@@ -1471,6 +1473,42 @@ export async function saveMessageSettings(input: MessageSettingsInput): Promise<
   }
 
   revalidatePath("/settings");
+  return { ok: true };
+}
+
+/**
+ * Configurações gerais (uma linha por usuário): juros de atraso padrão —
+ * copiado para cada contrato NOVO, nunca altera os existentes — e como o
+ * botão de cobrança abre o WhatsApp.
+ */
+export async function saveBusinessSettings(input: BusinessSettingsInput): Promise<ActionResult> {
+  const parsed = businessSettingsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const data = parsed.data;
+  const supabase = await createClient();
+  const ownerId = await getCurrentUserId(supabase);
+  if (!ownerId) {
+    return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  }
+
+  const { error } = await supabase.from("business_settings").upsert(
+    {
+      owner_id: ownerId,
+      late_interest_rate_percent_per_day: data.lateInterestRatePercentPerDay,
+      whatsapp_open_mode: data.whatsappOpenMode,
+      business_whatsapp_number: data.businessWhatsappNumber ? onlyDigits(data.businessWhatsappNumber) : null,
+    },
+    { onConflict: "owner_id" },
+  );
+
+  if (error) {
+    return { ok: false, error: safeError(error, "Erro ao salvar configurações.") };
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/debtors");
   return { ok: true };
 }
 

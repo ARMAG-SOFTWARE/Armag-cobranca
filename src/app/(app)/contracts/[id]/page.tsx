@@ -14,7 +14,9 @@ import { ContractStatusBadge, ContractTypeBadge } from "@/components/status-badg
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SpotlightCard } from "@/components/ui/spotlight-card";
 import { getClientDocumentSignedUrl } from "@/lib/client-documents";
+import { getBusinessSettings } from "@/lib/business-settings";
 import { createClient } from "@/lib/supabase/server";
+import { buildWhatsAppChatUrl } from "@/lib/whatsapp-open";
 import { calculateFinancedAmount, roundCents } from "@/lib/financial-rules";
 import { PERIODICITY_LABELS, type ContractWithInstallments, type Payment, type Phone } from "@/lib/types";
 import { formatCurrency, formatDate, formatPhone, initials, toWhatsAppDigits } from "@/lib/utils";
@@ -27,10 +29,11 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
 
   // As três consultas só dependem do `id` da URL — disparadas juntas, numa
   // única rodada de ida-e-volta ao banco, em vez de uma esperar a outra.
-  const [{ data, error }, { data: paymentsData }, { data: linkedPhoneData }] = await Promise.all([
+  const [{ data, error }, { data: paymentsData }, { data: linkedPhoneData }, businessSettings] = await Promise.all([
     supabase.from("contracts").select("*, client:clients(*), installments(*)").eq("id", id).single(),
     supabase.from("payments").select("*").eq("contract_id", id).order("paid_at", { ascending: false }),
     supabase.from("phones").select("*").eq("contract_id", id).maybeSingle(),
+    getBusinessSettings(supabase),
   ]);
 
   if (error || !data) {
@@ -41,6 +44,9 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   const installments = [...contract.installments].sort((a, b) => a.number - b.number);
   const paidCount = installments.filter((i) => i.status === "pago").length;
   const whatsappDigits = toWhatsAppDigits(contract.client.phone);
+  const whatsappUrl = whatsappDigits
+    ? buildWhatsAppChatUrl(whatsappDigits, undefined, businessSettings.whatsappOpenMode)
+    : null;
 
   const { markupAmount, ratePercent } = calculateFinancedAmount({
     contractType: contract.type,
@@ -86,10 +92,10 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
             </span>
             <div>
               <CardTitle className="text-xl">{contract.client.name}</CardTitle>
-              {whatsappDigits ? (
+              {whatsappUrl ? (
                 <a
-                  href={`https://wa.me/${whatsappDigits}`}
-                  target="_blank"
+                  href={whatsappUrl}
+                  target={whatsappUrl.startsWith("intent:") ? undefined : "_blank"}
                   rel="noreferrer"
                   className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                 >
@@ -255,7 +261,12 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
 
       <div>
         <h2 className="mb-3 text-lg font-bold tracking-tight text-foreground">Parcelas</h2>
-        <InstallmentsGrid installments={installments} contract={contract} client={contract.client} />
+        <InstallmentsGrid
+          installments={installments}
+          contract={contract}
+          client={contract.client}
+          whatsappOpenMode={businessSettings.whatsappOpenMode}
+        />
       </div>
 
       <div>

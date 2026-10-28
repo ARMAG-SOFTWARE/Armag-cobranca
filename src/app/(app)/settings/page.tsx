@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 
+import { BusinessSettingsForm } from "@/components/business-settings-form";
 import { SettingsForm } from "@/components/settings-form";
 import { GradientHeading } from "@/components/ui/gradient-heading";
+import { getBusinessSettings } from "@/lib/business-settings";
 import { createClient } from "@/lib/supabase/server";
 import type { MessageSettings } from "@/lib/types";
 
@@ -17,6 +19,7 @@ export default async function SettingsPage() {
     .maybeSingle();
 
   const settings = data as MessageSettings | null;
+  const businessSettings = await getBusinessSettings(supabase);
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
@@ -35,6 +38,8 @@ export default async function SettingsPage() {
           Configure o provedor de mensagens usado para enviar lembretes automáticos e manuais.
         </p>
       </div>
+
+      <BusinessSettingsForm initialSettings={businessSettings} />
 
       {/* api_key/auth_token nunca são enviados para o navegador — só um sinalizador
           de "já configurado". O valor real só sai do servidor no envio à API do

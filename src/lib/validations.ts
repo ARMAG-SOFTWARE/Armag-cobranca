@@ -268,3 +268,14 @@ export const settleContractSchema = z.object({
 });
 
 export type SettleContractInput = z.infer<typeof settleContractSchema>;
+
+export const businessSettingsSchema = z.object({
+  lateInterestRatePercentPerDay: z
+    .number({ error: "Informe o juros de atraso." })
+    .min(0, "O juros não pode ser negativo.")
+    .max(100, "Juros muito alto — confira o valor digitado."),
+  whatsappOpenMode: z.enum(["padrao", "business_android", "web"]),
+  businessWhatsappNumber: z.string().trim().optional().or(z.literal("")),
+});
+
+export type BusinessSettingsInput = z.infer<typeof businessSettingsSchema>;

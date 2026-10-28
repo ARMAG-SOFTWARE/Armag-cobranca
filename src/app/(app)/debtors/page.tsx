@@ -12,6 +12,7 @@ import { DebtorsView } from "@/components/debtors-view";
 import { GradientHeading } from "@/components/ui/gradient-heading";
 import { ShinyText } from "@/components/ui/shiny-text";
 import { StatTile } from "@/components/ui/stat-tile";
+import { getBusinessSettings } from "@/lib/business-settings";
 import { getTodayDebtors } from "@/lib/debtors";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,7 +20,10 @@ export const dynamic = "force-dynamic";
 
 export default async function DebtorsPage() {
   const supabase = await createClient();
-  const { debtors, summary, paidToday } = await getTodayDebtors(supabase);
+  const [{ debtors, summary, paidToday }, businessSettings] = await Promise.all([
+    getTodayDebtors(supabase),
+    getBusinessSettings(supabase),
+  ]);
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 sm:py-10">
@@ -59,7 +63,7 @@ export default async function DebtorsPage() {
         />
       </div>
 
-      <DebtorsView debtors={debtors} paidToday={paidToday} />
+      <DebtorsView debtors={debtors} paidToday={paidToday} whatsappOpenMode={businessSettings.whatsappOpenMode} />
     </main>
   );
 }

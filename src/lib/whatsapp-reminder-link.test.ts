@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { formatCurrency } from "@/lib/utils";
+import { buildWhatsAppChatUrl } from "@/lib/whatsapp-open";
 import {
   buildConsolidatedWhatsAppReminderLink,
   buildWhatsAppReminderLink,
@@ -197,3 +198,33 @@ describe("buildWhatsAppReminderLink (lembrete de parcela única)", () => {
 function roundSum(...values: number[]): number {
   return Math.round(values.reduce((sum, v) => sum + v, 0) * 100) / 100;
 }
+
+describe("buildWhatsAppChatUrl", () => {
+  it("padrão: wa.me com o texto", () => {
+    expect(buildWhatsAppChatUrl("5511999990000", "Oi tudo", "padrao")).toBe("https://wa.me/5511999990000?text=Oi%20tudo");
+  });
+
+  it("Business (Android): intent do pacote com.whatsapp.w4b, com wa.me como fallback", () => {
+    const url = buildWhatsAppChatUrl("5511999990000", "Oi", "business_android");
+    expect(url.startsWith("intent://send/?phone=5511999990000&text=Oi#Intent;")).toBe(true);
+    expect(url).toContain("package=com.whatsapp.w4b");
+    expect(url).not.toContain("package=com.whatsapp;");
+    expect(url).toContain(`S.browser_fallback_url=${encodeURIComponent("https://wa.me/5511999990000?text=Oi")}`);
+  });
+
+  it("WhatsApp Web: web.whatsapp.com/send", () => {
+    expect(buildWhatsAppChatUrl("5511999990000", undefined, "web")).toBe(
+      "https://web.whatsapp.com/send?phone=5511999990000",
+    );
+  });
+
+  it("o link de cobrança respeita o modo escolhido", () => {
+    const result = buildWhatsAppReminderLink(
+      { phone: "11999990000" },
+      { type: "emprestimo", principal_amount: 1000, installments_count: 4, late_interest_rate_percent_per_day: 1 },
+      { number: 1, amount: 375, due_date: "2099-12-31", status: "pendente", paid_principal_amount: 0, paid_interest_amount: 0 },
+      "business_android",
+    );
+    expect(result.ok && result.url.includes("package=com.whatsapp.w4b")).toBe(true);
+  });
+});

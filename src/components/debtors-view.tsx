@@ -16,8 +16,9 @@ import { RegisterPaymentDialog } from "@/components/register-payment-dialog";
 import { SettleContractDialog } from "@/components/settle-contract-dialog";
 import type { Debtor, DebtorInstallmentRow, PaidTodayRow } from "@/lib/debtors";
 import { roundCents } from "@/lib/financial-rules";
-import { CONTRACT_TYPE_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/types";
+import { CONTRACT_TYPE_LABELS, PAYMENT_METHOD_LABELS, type WhatsAppOpenMode } from "@/lib/types";
 import { formatCurrency, formatDate, formatDateTime, formatPercent, formatPhone, onlyDigits } from "@/lib/utils";
+import { buildWhatsAppChatUrl, openWhatsAppUrl } from "@/lib/whatsapp-open";
 import { buildConsolidatedWhatsAppReminderLink } from "@/lib/whatsapp-reminder-link";
 import { markReminderOpened } from "@/app/actions";
 
@@ -64,7 +65,15 @@ function DebtorBadge({ hasOverdue, hasDueToday }: { hasOverdue: boolean; hasDueT
   return <Badge variant="warning">🟡 Vence hoje</Badge>;
 }
 
-export function DebtorsView({ debtors, paidToday }: { debtors: Debtor[]; paidToday: PaidTodayRow[] }) {
+export function DebtorsView({
+  debtors,
+  paidToday,
+  whatsappOpenMode = "padrao",
+}: {
+  debtors: Debtor[];
+  paidToday: PaidTodayRow[];
+  whatsappOpenMode?: WhatsAppOpenMode;
+}) {
   const router = useRouter();
   const [tab, setTab] = useState<FilterTab>("todos");
   const [query, setQuery] = useState("");
@@ -104,13 +113,13 @@ export function DebtorsView({ debtors, paidToday }: { debtors: Debtor[]; paidTod
   // tratar a nova aba como pop-up e bloqueá-la (mesmo padrão já usado no
   // lembrete de parcela única em installments-grid.tsx).
   function handleCollectWhatsApp(debtor: Debtor) {
-    const result = buildConsolidatedWhatsAppReminderLink(debtor);
+    const result = buildConsolidatedWhatsAppReminderLink(debtor, whatsappOpenMode);
     if (!result.ok) {
       toast.error(result.error);
       return;
     }
 
-    window.open(result.url, "_blank", "noopener,noreferrer");
+    openWhatsAppUrl(result.url);
     toast.success("WhatsApp aberto com a cobrança consolidada. Confira e envie por lá.");
 
     // Best-effort: só registra que o lembrete foi iniciado para cada
@@ -169,7 +178,8 @@ export function DebtorsView({ debtors, paidToday }: { debtors: Debtor[]; paidTod
       ) : (
         <div className="flex flex-col gap-4">
           {filtered.map((debtor) => {
-            const whatsappLink = `https://wa.me/${onlyDigits(debtor.client.phone)}`;
+            const whatsappLink = buildWhatsAppChatUrl(onlyDigits(debtor.client.phone), undefined, whatsappOpenMode);
+            const opensInSameTab = whatsappLink.startsWith("intent:");
             return (
               <SpotlightCard key={debtor.client.id} className="p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -182,7 +192,7 @@ export function DebtorsView({ debtors, paidToday }: { debtors: Debtor[]; paidTod
                     </div>
                     <a
                       href={whatsappLink}
-                      target="_blank"
+                      target={opensInSameTab ? undefined : "_blank"}
                       rel="noreferrer"
                       className="mt-1 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
                     >

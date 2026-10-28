@@ -1,7 +1,8 @@
 import { calculateLateInterest, daysLate, roundCents } from "@/lib/financial-rules";
 import { getBusinessToday } from "@/lib/date-utils";
 import { formatCurrency, formatDate, toWhatsAppDigits } from "@/lib/utils";
-import type { Client, Contract, Installment } from "@/lib/types";
+import type { Client, Contract, Installment, WhatsAppOpenMode } from "@/lib/types";
+import { buildWhatsAppChatUrl } from "@/lib/whatsapp-open";
 
 export type ReminderLinkResult = { ok: true; url: string } | { ok: false; error: string };
 
@@ -36,6 +37,7 @@ export function buildWhatsAppReminderLink(
   client: Pick<Client, "phone">,
   contract: ReminderContract,
   installment: ReminderInstallment,
+  openMode: WhatsAppOpenMode = "padrao",
 ): ReminderLinkResult {
   const waDigits = toWhatsAppDigits(client.phone);
   if (!waDigits) {
@@ -78,7 +80,7 @@ export function buildWhatsAppReminderLink(
   lines.push(`Valor atualizado da parcela: ${formatCurrency(totalDueNow)}`);
   lines.push("", "Favor enviar o comprovante de pagamento.");
 
-  const url = `https://wa.me/${waDigits}?text=${encodeURIComponent(lines.join("\n"))}`;
+  const url = buildWhatsAppChatUrl(waDigits, lines.join("\n"), openMode);
   return { ok: true, url };
 }
 
@@ -111,11 +113,14 @@ export interface ConsolidatedReminderRow {
  * mostrado na tela — nunca um valor calculado em separado que possa
  * divergir do que o usuário já viu antes de clicar.
  */
-export function buildConsolidatedWhatsAppReminderLink(debtor: {
-  client: Pick<Client, "phone">;
-  rows: ConsolidatedReminderRow[];
-  totalDue: number;
-}): ReminderLinkResult {
+export function buildConsolidatedWhatsAppReminderLink(
+  debtor: {
+    client: Pick<Client, "phone">;
+    rows: ConsolidatedReminderRow[];
+    totalDue: number;
+  },
+  openMode: WhatsAppOpenMode = "padrao",
+): ReminderLinkResult {
   const waDigits = toWhatsAppDigits(debtor.client.phone);
   if (!waDigits) {
     return {
@@ -147,6 +152,6 @@ export function buildConsolidatedWhatsAppReminderLink(debtor: {
   lines.push(`Cálculo em ${formatDate(getBusinessToday())}.`);
   lines.push("", "Favor enviar o comprovante de pagamento.");
 
-  const url = `https://wa.me/${waDigits}?text=${encodeURIComponent(lines.join("\n"))}`;
+  const url = buildWhatsAppChatUrl(waDigits, lines.join("\n"), openMode);
   return { ok: true, url };
 }
