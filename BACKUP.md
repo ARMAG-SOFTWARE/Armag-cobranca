@@ -24,6 +24,13 @@ nunca no navegador. O `pg_dump` lê o banco a partir de um snapshot MVCC
 consistente (mecanismo nativo do Postgres) sem bloquear pagamentos nem
 qualquer outra escrita simultânea.
 
+## 0. Ativar o workflow
+
+O workflow `.github/workflows/backup.yml` fica **desligado** até existir a
+variável de repositório `BACKUP_ENABLED` com valor `true` (GitHub →
+Settings → Secrets and variables → Actions → aba *Variables*). Crie-a só
+depois de cadastrar todos os secrets abaixo.
+
 ## 1. Rodar a migration
 
 No SQL Editor do Supabase, rode `supabase/migrations/0014_backup_runs.sql`

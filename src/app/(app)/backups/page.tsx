@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/utils";
 import type { BackupRun } from "@/lib/types";
+import { BRAND } from "@/lib/brand";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,7 @@ export default async function BackupsPage() {
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 sm:py-10">
       <div>
-        <ShinyText className="text-xs font-semibold uppercase tracking-widest">Painel · RECEBE</ShinyText>
+        <ShinyText className="text-xs font-semibold uppercase tracking-widest">Painel · {BRAND.name}</ShinyText>
         <GradientHeading className="text-3xl sm:text-4xl">Backups</GradientHeading>
         <p className="mt-1 text-sm text-muted-foreground">
           Histórico das execuções do backup automático (a cada 6h, via GitHub Actions). Só metadados — nunca o

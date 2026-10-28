@@ -4,9 +4,10 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
- * Design tokens — "RECEBE" (Dark Fintech Neon)
- * Identidade escura por padrão (sem alternância clara), com
- * acentos em vermelho (marca) e verde (ganhos/sucesso) sobre
+ * Design tokens — ARMAG (Dark Fintech Neon, tema verde)
+ * Mesma estrutura visual do Recebe/Cobrança, só com a paleta da
+ * marca trocada: identidade escura por padrão, com acentos em
+ * verde (marca) e verde-água (ganhos/sucesso) sobre
  * preto profundo. Inspirado em dashboards como Linear/Vercel,
  * com toques de reactbits.dev (aurora, glow, spotlight, contadores
  * animados) — mantidos, só trocando a paleta.
@@ -19,7 +20,7 @@
   --card-foreground: #f1f0ee;
   --popover: #111114;
   --popover-foreground: #f1f0ee;
-  --primary: #e5233d;
+  --primary: #14b866;
   --primary-foreground: #ffffff;
   --secondary: #1b1b20;
   --secondary-foreground: #f1f0ee;
@@ -36,7 +37,7 @@
   --warning-foreground: #1b1b20;
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
-  --ring: #ff3548;
+  --ring: #2fe08a;
 }
 
 @theme inline {
@@ -217,11 +218,11 @@
    (mesma cor, com e sem opacidade) via style inline. */
 @keyframes pulse-glow-ring {
   0% {
-    box-shadow: 0 0 0 0 var(--pulse-glow-start, oklch(0.68 0.21 18 / 55%));
+    box-shadow: 0 0 0 0 var(--pulse-glow-start, oklch(0.72 0.18 152 / 55%));
   }
   70%,
   100% {
-    box-shadow: 0 0 0 6px var(--pulse-glow-end, oklch(0.68 0.21 18 / 0%));
+    box-shadow: 0 0 0 6px var(--pulse-glow-end, oklch(0.72 0.18 152 / 0%));
   }
 }
 

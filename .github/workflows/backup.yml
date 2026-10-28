@@ -18,6 +18,11 @@ concurrency:
 
 jobs:
   backup:
+    # Só roda depois que o backup for configurado (secrets + R2, ver
+    # BACKUP.md) e a variável de repositório BACKUP_ENABLED=true for criada
+    # em Settings → Secrets and variables → Actions → Variables. Sem isso,
+    # o agendamento a cada 6h fica pulado em vez de falhar toda vez.
+    if: ${{ vars.BACKUP_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     # Se o backup passar disso, o job é encerrado e marcado como falha —
     # dispara o alerta (e-mail automático do GitHub para execuções

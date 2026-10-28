@@ -17,6 +17,7 @@ import {
 
 import { signOut } from "@/app/auth-actions";
 import { cn } from "@/lib/utils";
+import { BRAND } from "@/lib/brand";
 
 type NavItem = { href: string; label: string; icon: typeof UsersIcon; exact: boolean };
 
@@ -37,15 +38,15 @@ function BrandMark({ size = 34 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
       <defs>
-        <radialGradient id="recebe-logo-glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#ff3548" stopOpacity="0.95" />
-          <stop offset="60%" stopColor="#e5233d" stopOpacity="0.4" />
-          <stop offset="100%" stopColor="#e5233d" stopOpacity="0" />
+        <radialGradient id="brand-logo-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor={BRAND.glowColor} stopOpacity="0.95" />
+          <stop offset="60%" stopColor={BRAND.primaryColor} stopOpacity="0.4" />
+          <stop offset="100%" stopColor={BRAND.primaryColor} stopOpacity="0" />
         </radialGradient>
       </defs>
-      <circle cx="50" cy="50" r="48" fill="url(#recebe-logo-glow)" />
-      <circle cx="50" cy="50" r="29" fill="#0a0a0c" stroke="#ff3548" strokeWidth="2.5" />
-      <ellipse cx="50" cy="50" rx="5.5" ry="19" fill="#ff3548" />
+      <circle cx="50" cy="50" r="48" fill="url(#brand-logo-glow)" />
+      <circle cx="50" cy="50" r="29" fill="#0a0a0c" stroke={BRAND.glowColor} strokeWidth="2.5" />
+      <ellipse cx="50" cy="50" rx="5.5" ry="19" fill={BRAND.glowColor} />
     </svg>
   );
 }
@@ -87,9 +88,9 @@ function SidebarContent({ userEmail, pathname }: { userEmail: string | null; pat
       <Link href="/" className="flex items-center gap-2.5 px-1">
         <BrandMark />
         <div>
-          <div className="font-display text-lg leading-none font-bold tracking-[0.2em]">RECEBE</div>
+          <div className="font-display text-lg leading-none font-bold tracking-[0.2em]">{BRAND.name}</div>
           <div className="mt-1 text-[8.5px] tracking-[0.15em] text-muted-foreground uppercase">
-            Cobrança sob controle
+            {BRAND.tagline}
           </div>
         </div>
       </Link>
@@ -145,7 +146,7 @@ export function AppNav({ userEmail }: { userEmail: string | null }) {
       <header className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-white/10 bg-background px-4 py-3 md:hidden">
         <Link href="/" className="flex items-center gap-2">
           <BrandMark size={28} />
-          <span className="font-display text-sm font-bold tracking-[0.2em]">RECEBE</span>
+          <span className="font-display text-sm font-bold tracking-[0.2em]">{BRAND.name}</span>
         </Link>
         <button
           type="button"

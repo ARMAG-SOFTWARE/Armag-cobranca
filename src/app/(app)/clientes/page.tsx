@@ -5,6 +5,7 @@ import { GradientHeading } from "@/components/ui/gradient-heading";
 import { ShinyText } from "@/components/ui/shiny-text";
 import { createClient } from "@/lib/supabase/server";
 import type { ContractWithInstallments } from "@/lib/types";
+import { BRAND } from "@/lib/brand";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export default async function ClientesPage() {
     <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 sm:py-10">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
-          <ShinyText className="text-xs font-semibold uppercase tracking-widest">Painel · RECEBE</ShinyText>
+          <ShinyText className="text-xs font-semibold uppercase tracking-widest">Painel · {BRAND.name}</ShinyText>
           <GradientHeading className="text-3xl sm:text-4xl">Clientes</GradientHeading>
           <p className="mt-1 text-sm text-muted-foreground">
             Empréstimos e vendas de produtos parceladas — visão geral e status de cobrança.

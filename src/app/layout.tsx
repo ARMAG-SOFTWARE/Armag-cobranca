@@ -4,6 +4,8 @@ import { AuroraBackground } from "@/components/ui/aurora-background";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
+import { BRAND } from "@/lib/brand";
+
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
@@ -21,7 +23,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RECEBE — Gestão de Empréstimos e Vendas",
+  title: BRAND.fullName,
   description: "Gerencie clientes, empréstimos e vendas de produtos parceladas com cobrança automática via WhatsApp.",
   manifest: "/manifest.json",
   icons: {
@@ -31,7 +33,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "RECEBE",
+    title: BRAND.name,
   },
 };
 
@@ -40,7 +42,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#080809",
+  themeColor: BRAND.backgroundColor,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

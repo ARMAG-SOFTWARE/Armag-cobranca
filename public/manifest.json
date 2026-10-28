@@ -1,6 +1,6 @@
 {
-  "name": "RECEBE — Gestão de Empréstimos e Vendas",
-  "short_name": "RECEBE",
+  "name": "ARMAG — Gestão de Empréstimos e Vendas",
+  "short_name": "ARMAG",
   "description": "Gerencie clientes, empréstimos e vendas de produtos parceladas com cobrança automática via WhatsApp.",
   "start_url": "/",
   "display": "standalone",
