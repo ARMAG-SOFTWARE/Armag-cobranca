@@ -1,0 +1,24 @@
+{
+  "name": "RECEBE — Gestão de Empréstimos e Vendas",
+  "short_name": "RECEBE",
+  "description": "Gerencie clientes, empréstimos e vendas de produtos parceladas com cobrança automática via WhatsApp.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080809",
+  "theme_color": "#080809",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

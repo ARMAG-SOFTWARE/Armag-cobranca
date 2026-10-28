@@ -1,0 +1,13 @@
+{
+  "regions": ["gru1"],
+  "crons": [
+    {
+      "path": "/api/cron/check-overdue",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-dispatch",
+      "schedule": "0 13 * * 1-5"
+    }
+  ]
+}

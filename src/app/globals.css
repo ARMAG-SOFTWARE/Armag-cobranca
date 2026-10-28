@@ -1,0 +1,249 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+ * Design tokens — "RECEBE" (Dark Fintech Neon)
+ * Identidade escura por padrão (sem alternância clara), com
+ * acentos em vermelho (marca) e verde (ganhos/sucesso) sobre
+ * preto profundo. Inspirado em dashboards como Linear/Vercel,
+ * com toques de reactbits.dev (aurora, glow, spotlight, contadores
+ * animados) — mantidos, só trocando a paleta.
+ * ============================================================ */
+:root {
+  --radius: 1rem;
+  --background: #080809;
+  --foreground: #f1f0ee;
+  --card: #111114;
+  --card-foreground: #f1f0ee;
+  --popover: #111114;
+  --popover-foreground: #f1f0ee;
+  --primary: #e5233d;
+  --primary-foreground: #ffffff;
+  --secondary: #1b1b20;
+  --secondary-foreground: #f1f0ee;
+  --muted: #1b1b20;
+  --muted-foreground: #92929d;
+  --accent: #1b1b20;
+  --accent-foreground: #f1f0ee;
+  --accent-cyan: #20d9a0;
+  --destructive: #ff3548;
+  --destructive-foreground: #ffffff;
+  --success: #20d9a0;
+  --success-foreground: #0d352b;
+  --warning: #92929d;
+  --warning-foreground: #1b1b20;
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: #ff3548;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-cyan: var(--accent-cyan);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-cinzel);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+  h1,
+  h2 {
+    @apply font-display;
+  }
+  input,
+  select,
+  textarea,
+  button {
+    font-size: 16px;
+  }
+}
+
+/* ============================================================
+ * Efeitos visuais (inspirados em reactbits.dev / uiverse.io)
+ * ============================================================ */
+
+/* Gradiente de marca — usado em títulos e realces */
+.text-gradient-brand {
+  display: inline-block;
+  background-image: linear-gradient(100deg, var(--primary), var(--accent-cyan));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* Textura de grid sutil, esmaecendo nas bordas — profundidade extra atrás do conteúdo */
+.bg-grid-fade {
+  background-image:
+    linear-gradient(color-mix(in oklch, var(--foreground), transparent 94%) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--foreground), transparent 94%) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 75% 55% at 50% 0%, black 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 75% 55% at 50% 0%, black 40%, transparent 100%);
+}
+
+/* Shiny text: brilho varrendo o texto (uiverse.io "shine" effect) */
+@keyframes shiny-text-sweep {
+  0% {
+    background-position: 150% center;
+  }
+  100% {
+    background-position: -50% center;
+  }
+}
+
+.shiny-text {
+  display: inline-block;
+  background-image: linear-gradient(
+    100deg,
+    var(--shiny-text-base, var(--muted-foreground)) 35%,
+    var(--shiny-text-shine, var(--accent-cyan)) 50%,
+    var(--shiny-text-base, var(--muted-foreground)) 65%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: shiny-text-sweep 3.5s linear infinite;
+}
+
+/* Spotlight card: brilho radial seguindo o cursor (reactbits SpotlightCard),
+   com glow ambiente permanente para o visual "vidro" ficar vivo em repouso. */
+.card-spotlight {
+  --mouse-x: 50%;
+  --mouse-y: 50%;
+  --spotlight-color: color-mix(in oklch, var(--primary), transparent 45%);
+  position: relative;
+  isolation: isolate;
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklch, white, transparent 92%),
+    0 30px 60px -30px color-mix(in oklch, var(--primary), transparent 60%);
+  transition: box-shadow 0.4s ease;
+}
+.card-spotlight:hover {
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklch, white, transparent 88%),
+    0 30px 70px -25px color-mix(in oklch, var(--primary), transparent 45%);
+}
+.card-spotlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle 420px at var(--mouse-x) var(--mouse-y), var(--spotlight-color), transparent 80%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.card-spotlight:hover::before,
+.card-spotlight:focus-within::before {
+  opacity: 1;
+}
+.card-spotlight > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Glow button: gradiente violeta→ciano animado + brilho externo (uiverse.io) */
+@keyframes glow-button-sheen {
+  to {
+    background-position: 200% center;
+  }
+}
+
+.btn-glow {
+  position: relative;
+  background: linear-gradient(100deg, var(--primary) 0%, var(--accent-cyan) 50%, var(--primary) 100%);
+  background-size: 220% auto;
+  animation: glow-button-sheen 4s ease-in-out infinite alternate;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 20%),
+    0 0 0 1px color-mix(in oklch, var(--primary), transparent 60%),
+    0 10px 28px -6px color-mix(in oklch, var(--primary), transparent 20%),
+    0 10px 40px -8px color-mix(in oklch, var(--accent-cyan), transparent 45%);
+  transition:
+    box-shadow 0.3s ease,
+    transform 0.15s ease;
+}
+.btn-glow:hover {
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 25%),
+    0 0 0 1px color-mix(in oklch, var(--primary), transparent 45%),
+    0 12px 36px -4px color-mix(in oklch, var(--primary), transparent 5%),
+    0 12px 48px -6px color-mix(in oklch, var(--accent-cyan), transparent 30%);
+}
+.btn-glow:active {
+  transform: scale(0.98);
+}
+
+/* Pulse glow: anel pulsante para status que exigem atenção (uiverse.io).
+   O componente que usa esta classe define --pulse-glow-start/--pulse-glow-end
+   (mesma cor, com e sem opacidade) via style inline. */
+@keyframes pulse-glow-ring {
+  0% {
+    box-shadow: 0 0 0 0 var(--pulse-glow-start, oklch(0.68 0.21 18 / 55%));
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px var(--pulse-glow-end, oklch(0.68 0.21 18 / 0%));
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow-ring 2s ease-out infinite;
+}
+
+/* Glow ambiente para badges de status (uiverse.io neon pills) */
+.badge-glow-success {
+  box-shadow: 0 0 14px -3px color-mix(in oklch, var(--success), transparent 35%);
+}
+.badge-glow-warning {
+  box-shadow: 0 0 14px -3px color-mix(in oklch, var(--warning), transparent 35%);
+}
+.badge-glow-destructive {
+  box-shadow: 0 0 14px -3px color-mix(in oklch, var(--destructive), transparent 30%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shiny-text,
+  .btn-glow,
+  .pulse-glow {
+    animation: none;
+  }
+}

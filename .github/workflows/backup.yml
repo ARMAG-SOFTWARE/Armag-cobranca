@@ -1,0 +1,73 @@
+name: Backup automático (a cada 6h)
+
+# Roda independente da Vercel/navegador — o GitHub Actions é quem dispara,
+# 24/7, mesmo sem ninguém acessando o sistema. `workflow_dispatch` permite
+# rodar manualmente (ex.: para testar) pela aba Actions do repositório.
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+# Nunca deixa duas execuções rodarem ao mesmo tempo (item 9 da auditoria de
+# backup): se uma execução ainda estiver rodando quando a próxima horária
+# chegar, a nova FICA NA FILA em vez de rodar em paralelo (cancel-in-progress:
+# false) — nunca corrompe/duplica um backup em andamento.
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    # Se o backup passar disso, o job é encerrado e marcado como falha —
+    # dispara o alerta (e-mail automático do GitHub para execuções
+    # agendadas com falha) para investigar a causa, em vez de deixar rodar
+    # indefinidamente competindo com a próxima execução agendada.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # postgresql-client traz pg_dump/pg_restore — as ferramentas nativas
+      # do Postgres, não uma reimplementação caseira de dump (item 3).
+      # O repositório padrão do Ubuntu só tem a versão 16, mas o Supabase já
+      # roda Postgres 17 — e o pg_dump recusa rodar contra um servidor mais
+      # novo que ele mesmo ("server version mismatch"). Por isso instala a
+      # versão 17 direto do repositório oficial do PostgreSQL (PGDG).
+      - name: Instalar cliente Postgres 17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates gnupg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          # O runner já vem com um pg_dump mais antigo em /usr/bin — garante
+          # que os passos seguintes usem o binário da versão 17 (evita
+          # depender do mecanismo de "versão padrão" do postgresql-common).
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Conferir versão do pg_dump
+        run: pg_dump --version
+
+      - name: Instalar dependências do script de backup
+        working-directory: scripts/backup
+        run: npm install
+
+      - name: Executar backup
+        working-directory: scripts/backup
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          APP_URL: ${{ secrets.APP_URL }}
+          BACKUP_REPORT_SECRET: ${{ secrets.BACKUP_REPORT_SECRET }}
+        run: node backup.mjs
