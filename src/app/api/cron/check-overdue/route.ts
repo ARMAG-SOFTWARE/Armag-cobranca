@@ -22,12 +22,29 @@ export async function GET(request: NextRequest) {
   //    vencimento já passou (uma parcela paga em parte continua acumulando
   //    juros e deve aparecer como atrasada até ser quitada — o valor já
   //    pago fica preservado em paid_principal_amount, não é perdido).
-  const { data: newlyOverdue, error: overdueError } = await supabase
+  //    Contratos cancelados ficam de fora: cancelar encerra a cobrança, então
+  //    as parcelas deles nunca podem voltar a "atrasado" nem reabrir o
+  //    contrato como inadimplente (mesma regra de recalculateContractStatus).
+  const { data: candidates, error: candidatesError } = await supabase
     .from("installments")
-    .update({ status: "atrasado" })
+    .select("id, contract:contracts!inner(status)")
     .in("status", ["pendente", "parcial"])
     .lt("due_date", today)
-    .select("id, contract_id");
+    .neq("contract.status", "cancelado");
+
+  let newlyOverdue: Array<{ id: string; contract_id: string }> = [];
+  let overdueError = candidatesError;
+  const candidateIds = (candidates ?? []).map((installment) => installment.id);
+  for (let start = 0; !overdueError && start < candidateIds.length; start += 200) {
+    const { data, error } = await supabase
+      .from("installments")
+      .update({ status: "atrasado" })
+      .in("id", candidateIds.slice(start, start + 200))
+      .in("status", ["pendente", "parcial"])
+      .select("id, contract_id");
+    overdueError = error;
+    newlyOverdue = newlyOverdue.concat(data ?? []);
+  }
 
   if (overdueError) {
     // Nunca repassa a mensagem crua do Postgres (pode conter nomes de
@@ -64,8 +81,9 @@ export async function GET(request: NextRequest) {
   //    por aqui também duplicaria mensagens no mesmo dia.
   const { data: dueForReminder } = await supabase
     .from("installments")
-    .select("id, reminder_sent_at, contract:contracts(periodicity)")
-    .eq("status", "atrasado");
+    .select("id, reminder_sent_at, contract:contracts!inner(periodicity, status)")
+    .eq("status", "atrasado")
+    .neq("contract.status", "cancelado");
 
   let sent = 0;
   let failed = 0;
@@ -73,7 +91,7 @@ export async function GET(request: NextRequest) {
   for (const installment of (dueForReminder ?? []) as unknown as Array<{
     id: string;
     reminder_sent_at: string | null;
-    contract: { periodicity: string } | null;
+    contract: { periodicity: string; status: string } | null;
   }>) {
     if (installment.contract?.periodicity === "semanal") continue;
 

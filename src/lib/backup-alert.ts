@@ -17,6 +17,11 @@ export async function sendBackupFailureAlert(supabase: SupabaseClient, summary: 
       .from("message_settings")
       .select("*")
       .eq("is_active", true)
+      .not("admin_alert_phone", "is", null)
+      // Cada usuário tem a própria configuração ativa: usa a mais recente
+      // que tenha telefone de alerta (o cliente aqui é service role).
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (!settings?.admin_alert_phone) return;

@@ -68,6 +68,7 @@ export async function sendCollectionReminder(
     const result = await provider.send(client.phone, { text: message, templateParams });
 
     await supabase.from("message_logs").insert({
+      owner_id: contract.owner_id,
       installment_id: installment.id,
       client_id: client.id,
       status: result.ok ? "sent" : "failed",
@@ -89,6 +90,7 @@ export async function sendCollectionReminder(
     return { ok: false, error: `Falha ao enviar (HTTP ${result.statusCode}).` };
   } catch (error) {
     await supabase.from("message_logs").insert({
+      owner_id: contract.owner_id,
       installment_id: installment.id,
       client_id: client.id,
       status: "failed",

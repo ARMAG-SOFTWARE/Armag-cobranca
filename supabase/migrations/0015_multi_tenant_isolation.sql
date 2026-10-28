@@ -40,6 +40,21 @@ declare
 begin
   select id into admin_id from auth.users order by created_at asc limit 1;
 
+  -- Banco novo (nenhum registro antigo sem dono): não há o que atribuir,
+  -- então a migration segue mesmo sem usuário criado ainda.
+  if admin_id is null
+    and not exists (select 1 from clients where owner_id is null)
+    and not exists (select 1 from contracts where owner_id is null)
+    and not exists (select 1 from installments where owner_id is null)
+    and not exists (select 1 from payments where owner_id is null)
+    and not exists (select 1 from expenses where owner_id is null)
+    and not exists (select 1 from phones where owner_id is null)
+    and not exists (select 1 from message_settings where owner_id is null)
+    and not exists (select 1 from weekly_charges where owner_id is null)
+  then
+    return;
+  end if;
+
   if admin_id is null then
     raise exception 'Nenhum usuário encontrado em auth.users — crie o usuário administrador antes de rodar esta migração.';
   end if;

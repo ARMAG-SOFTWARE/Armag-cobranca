@@ -85,6 +85,7 @@ export async function dispatchWeeklyCharge(
     const result = await provider.send(client.phone, { text: finalMessage, templateParams });
 
     await supabase.from("message_logs").insert({
+      owner_id: client.owner_id,
       installment_id: pendingInstallment.id,
       client_id: client.id,
       status: result.ok ? "sent" : "failed",
@@ -116,6 +117,7 @@ export async function dispatchWeeklyCharge(
     return { ok: true };
   } catch (error) {
     await supabase.from("message_logs").insert({
+      owner_id: client.owner_id,
       installment_id: pendingInstallment.id,
       client_id: client.id,
       status: "failed",

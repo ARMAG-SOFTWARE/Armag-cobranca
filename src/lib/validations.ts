@@ -151,9 +151,55 @@ export const contractDisbursementSchema = z.object({
 
 export type ContractDisbursementInput = z.infer<typeof contractDisbursementSchema>;
 
+/**
+ * A URL do provedor é chamada pelo SERVIDOR (fetch em lib/whatsapp), então
+ * nunca pode apontar para a rede interna (localhost, IPs privados, metadata
+ * de nuvem): sem esta trava, qualquer usuário logado faria o servidor
+ * acessar endereços internos. Só http(s) e só hosts públicos.
+ */
+export function isAllowedProviderBaseUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+  if (url.username || url.password) return false;
+
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) {
+    return false;
+  }
+  if (host.includes(":")) {
+    // IPv6 literal: bloqueia loopback, não especificado, link-local, ULA e IPv4 mapeado.
+    return !(host === "::1" || host === "::" || /^(fe8|fe9|fea|feb|fc|fd)/.test(host) || host.startsWith("::ffff:"));
+  }
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 100 && b >= 64 && b <= 127) return false;
+  } else if (/^\d+$/.test(host) || /^0x/i.test(host)) {
+    // Formas numéricas alternativas de IP (ex.: 2130706433, 0x7f000001).
+    return false;
+  }
+  return true;
+}
+
 export const messageSettingsSchema = z.object({
   provider: z.enum(["evolution", "zapi", "twilio", "wppconnect", "meta"]),
-  baseUrl: z.string().trim().optional().or(z.literal("")),
+  baseUrl: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || isAllowedProviderBaseUrl(value), {
+      message: "Informe uma URL pública começando com https:// (endereços internos não são permitidos).",
+    })
+    .optional()
+    .or(z.literal("")),
   apiKey: z.string().trim().optional().or(z.literal("")),
   instanceId: z.string().trim().optional().or(z.literal("")),
   senderNumber: z.string().trim().optional().or(z.literal("")),

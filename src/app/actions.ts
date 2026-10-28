@@ -1422,10 +1422,15 @@ export async function saveMessageSettings(input: MessageSettingsInput): Promise<
   const { data: current } = await supabase
     .from("message_settings")
     .select("api_key, auth_token")
+    .eq("owner_id", ownerId)
     .eq("is_active", true)
     .maybeSingle();
 
-  await supabase.from("message_settings").update({ is_active: false }).eq("is_active", true);
+  await supabase
+    .from("message_settings")
+    .update({ is_active: false })
+    .eq("owner_id", ownerId)
+    .eq("is_active", true);
 
   const { error } = await supabase.from("message_settings").insert({
     owner_id: ownerId,
