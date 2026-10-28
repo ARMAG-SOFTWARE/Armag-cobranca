@@ -14,6 +14,7 @@ import {
   allocateSettlement,
   calculateFinancedAmount,
   calculateLateInterest,
+  DEFAULT_LATE_INTEREST_RATE_PERCENT_PER_DAY,
   daysLate,
   roundCents,
   splitPayment,
@@ -154,18 +155,27 @@ export async function createTransaction(input: TransactionInput): Promise<Action
   }
 
   const hasDownPayment = data.type === "venda_iphone" && data.hasDownPayment;
-  // Taxa de juros por parcela só existe para empréstimo (garantido pelo
-  // refine do schema) — venda_iphone sempre ignora este valor dentro de
-  // calculateFinancedAmount, então 0 aqui é só um placeholder inofensivo.
-  const interestRatePercent = data.type === "emprestimo" ? data.interestRatePercent! : 0;
+  // Empréstimo: % por semana; venda de produto: % fixo (obrigatório para
+  // os dois tipos, garantido pelo refine do schema).
+  const interestRatePercent = data.interestRatePercent!;
   const { totalFinanced } = calculateFinancedAmount({
     contractType: data.type,
     principalAmount: data.totalAmount,
     installmentsCount: data.installmentsCount,
+    periodicity: data.periodicity,
     hasDownPayment,
     downPaymentAmount: data.downPaymentAmount,
-    interestRatePercentPerInstallment: interestRatePercent,
+    interestRatePercent,
   });
+  // Juros de atraso: copia a taxa atual de Configurações para o contrato —
+  // mudar a configuração depois nunca altera este contrato.
+  const { data: businessSettings } = await supabase
+    .from("business_settings")
+    .select("late_interest_rate_percent_per_day")
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+  const lateInterestRatePercentPerDay =
+    businessSettings?.late_interest_rate_percent_per_day ?? DEFAULT_LATE_INTEREST_RATE_PERCENT_PER_DAY;
   // "Ainda vai sair" (campo em branco) fica como null — não debita o saldo
   // geral de caixa até o usuário confirmar a data real da saída, editando
   // depois na tela do contrato.
@@ -191,6 +201,7 @@ export async function createTransaction(input: TransactionInput): Promise<Action
       first_due_date: data.firstDueDate,
       status: "ativo",
       interest_rate_percent: interestRatePercent,
+      late_interest_rate_percent_per_day: lateInterestRatePercentPerDay,
       disbursed_at: disbursedAt,
     })
     .select("id")
@@ -499,7 +510,13 @@ export async function registerPayment(input: PaymentInput): Promise<ActionResult
     paid_interest_amount: number;
     due_date: string;
     status: InstallmentStatus;
-    contract: { client_id: string; type: ContractType; principal_amount: number; status: ContractStatus } | null;
+    contract: {
+      client_id: string;
+      type: ContractType;
+      principal_amount: number;
+      late_interest_rate_percent_per_day: number;
+      status: ContractStatus;
+    } | null;
   };
 
   const [{ data: existingPayment }, { data: installmentData, error: installmentError }] = await Promise.all([
@@ -509,7 +526,7 @@ export async function registerPayment(input: PaymentInput): Promise<ActionResult
     supabase
       .from("installments")
       .select(
-        "id, contract_id, amount, paid_principal_amount, paid_interest_amount, due_date, status, contract:contracts(client_id, type, principal_amount, status)",
+        "id, contract_id, amount, paid_principal_amount, paid_interest_amount, due_date, status, contract:contracts(client_id, type, principal_amount, late_interest_rate_percent_per_day, status)",
       )
       .eq("id", data.installmentId)
       .single(),
@@ -548,7 +565,7 @@ export async function registerPayment(input: PaymentInput): Promise<ActionResult
   // que incluísse juros "desaparecia" e era recalculado do zero na consulta
   // seguinte — a causa raiz do total R$590 em vez de R$520 num caso real).
   const interestOwed = calculateLateInterest({
-    contractType: contract.type,
+    lateInterestRatePercentPerDay: contract.late_interest_rate_percent_per_day,
     originalPrincipalAmount: contract.principal_amount,
     dueDate: installment.due_date,
     status: installment.status,
@@ -685,6 +702,7 @@ type SettlementContractRow = {
   type: ContractType;
   status: ContractStatus;
   principal_amount: number;
+  late_interest_rate_percent_per_day: number;
   client: { name: string } | null;
   installments: {
     id: string;
@@ -698,7 +716,7 @@ type SettlementContractRow = {
 };
 
 function buildSettlementInstallmentInputs(
-  contract: Pick<SettlementContractRow, "type" | "principal_amount" | "installments">,
+  contract: Pick<SettlementContractRow, "late_interest_rate_percent_per_day" | "principal_amount" | "installments">,
 ): { remaining: SettlementContractRow["installments"]; settlementInput: SettlementInstallmentInput[] } {
   const remaining = contract.installments.filter((installment) => installment.status !== "pago");
   const settlementInput: SettlementInstallmentInput[] = remaining.map((installment) => ({
@@ -706,7 +724,7 @@ function buildSettlementInstallmentInputs(
     number: installment.number,
     outstandingPrincipal: roundCents(Math.max(installment.amount - installment.paid_principal_amount, 0)),
     interestOwed: calculateLateInterest({
-      contractType: contract.type,
+      lateInterestRatePercentPerDay: contract.late_interest_rate_percent_per_day,
       originalPrincipalAmount: contract.principal_amount,
       dueDate: installment.due_date,
       status: installment.status,
@@ -731,7 +749,7 @@ export async function getContractSettlementSummary(
     supabase
       .from("contracts")
       .select(
-        "id, owner_id, client_id, type, status, principal_amount, client:clients(name), installments(id, number, amount, due_date, status, paid_principal_amount, paid_interest_amount)",
+        "id, owner_id, client_id, type, status, principal_amount, late_interest_rate_percent_per_day, client:clients(name), installments(id, number, amount, due_date, status, paid_principal_amount, paid_interest_amount)",
       )
       .eq("id", contractId)
       .single(),
@@ -798,7 +816,7 @@ export async function settleContract(contractId: string, input: SettleContractIn
     supabase
       .from("contracts")
       .select(
-        "id, owner_id, client_id, type, status, principal_amount, client:clients(name), installments(id, number, amount, due_date, status, paid_principal_amount, paid_interest_amount)",
+        "id, owner_id, client_id, type, status, principal_amount, late_interest_rate_percent_per_day, client:clients(name), installments(id, number, amount, due_date, status, paid_principal_amount, paid_interest_amount)",
       )
       .eq("id", contractId)
       .single(),
@@ -975,7 +993,7 @@ export async function updateIphoneSale(contractId: string, input: IphoneSaleUpda
   const { data: contract, error: contractError } = await supabase
     .from("contracts")
     .select(
-      "id, owner_id, type, principal_amount, installments_count, periodicity, first_due_date, has_down_payment, down_payment_amount",
+      "id, owner_id, type, principal_amount, installments_count, periodicity, first_due_date, has_down_payment, down_payment_amount, interest_rate_percent",
     )
     .eq("id", contractId)
     .single();
@@ -1044,9 +1062,10 @@ export async function updateIphoneSale(contractId: string, input: IphoneSaleUpda
       contractType: "venda_iphone",
       principalAmount: newSaleAmount,
       installmentsCount: contract.installments_count,
+      periodicity: contract.periodicity,
       hasDownPayment: contract.has_down_payment,
       downPaymentAmount: contract.down_payment_amount,
-      interestRatePercentPerInstallment: 0,
+      interestRatePercent: contract.interest_rate_percent,
     });
 
     const { error: contractUpdateError } = await supabase

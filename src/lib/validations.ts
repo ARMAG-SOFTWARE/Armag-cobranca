@@ -1,6 +1,8 @@
 import { z } from "zod";
 
+import { PRODUCT_SALE_MAX_WEEKS } from "@/lib/financial-rules";
 import { IMEI_PATTERN } from "@/lib/imei";
+import { installmentPlanSpanDays } from "@/lib/installments";
 
 export const transactionSchema = z
   .object({
@@ -10,16 +12,16 @@ export const transactionSchema = z
     clientEmail: z.string().trim().email().optional().or(z.literal("")),
     type: z.enum(["emprestimo", "venda_iphone"]),
     description: z.string().trim().optional().or(z.literal("")),
-    /** Valor original do produto/empréstimo, antes do markup de 30% (aplicado no backend). */
+    /** Valor original do produto/empréstimo, antes do juros contratual (aplicado no backend). */
     totalAmount: z.number({ error: "Informe o valor total." }).positive("O valor total deve ser maior que zero."),
     installmentsCount: z
       .number({ error: "Informe a quantidade de parcelas." })
       .int()
       .min(1, "Mínimo de 1 parcela.")
       .max(60, "Máximo de 60 parcelas."),
-    periodicity: z.enum(["semanal", "quinzenal", "mensal"]),
+    periodicity: z.enum(["diaria", "semanal", "quinzenal", "mensal"]),
     firstDueDate: z.string().min(10, "Informe a data do primeiro vencimento."),
-    /** Só relevante/obrigatório para empréstimo — venda_iphone nunca tem juros automático. */
+    /** Empréstimo: % por semana. Venda de produto: % fixo sobre o valor financiado. */
     interestRatePercent: z
       .number({ error: "Informe a taxa de juros." })
       .min(0, "A taxa não pode ser negativa.")
@@ -63,10 +65,20 @@ export const transactionSchema = z
     message: "A entrada deve ser menor que o valor total do produto.",
     path: ["downPaymentAmount"],
   })
-  .refine((data) => data.type !== "emprestimo" || data.interestRatePercent !== undefined, {
+  .refine((data) => data.interestRatePercent !== undefined && !Number.isNaN(data.interestRatePercent), {
     message: "Informe a taxa de juros.",
     path: ["interestRatePercent"],
   })
+  .refine(
+    (data) =>
+      data.type !== "venda_iphone" ||
+      data.firstDueDate.length < 10 ||
+      installmentPlanSpanDays(data) < PRODUCT_SALE_MAX_WEEKS * 7,
+    {
+      message: `Venda de produto: todas as parcelas devem vencer em até ${PRODUCT_SALE_MAX_WEEKS} semanas a partir do 1º vencimento.`,
+      path: ["installmentsCount"],
+    },
+  )
   .refine((data) => data.type !== "venda_iphone" || (data.phoneModel && data.phoneModel.length > 0), {
     message: "Informe o nome do produto.",
     path: ["phoneModel"],

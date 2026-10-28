@@ -1,6 +1,6 @@
 export type ContractType = "emprestimo" | "venda_iphone";
 
-export type Periodicity = "semanal" | "quinzenal" | "mensal";
+export type Periodicity = "diaria" | "semanal" | "quinzenal" | "mensal";
 
 export type ContractStatus = "ativo" | "inadimplente" | "quitado" | "cancelado";
 
@@ -42,9 +42,9 @@ export interface Contract {
   client_id: string;
   type: ContractType;
   description: string | null;
-  /** Valor final financiado (já com os 30% aplicados) — o que é dividido em parcelas. */
+  /** Valor final financiado (já com o juros contratual aplicado) — o que é dividido em parcelas. */
   total_amount: number;
-  /** Valor original do produto/empréstimo, antes do markup de 30%. */
+  /** Valor original do produto/empréstimo, antes do juros contratual. */
   principal_amount: number;
   has_down_payment: boolean;
   /** Valor da entrada (só relevante quando type = "venda_iphone"). Recebido à vista, fora das parcelas. */
@@ -54,11 +54,17 @@ export interface Contract {
   first_due_date: string;
   status: ContractStatus;
   /**
-   * Taxa de juros por parcela (%), escolhida manualmente pelo usuário no
-   * cadastro (sugestão inicial de 7,5%, mas livre para alterar). Ignorada
-   * para venda_iphone — venda nunca tem juros automático.
+   * Taxa de juros contratual (%), escolhida manualmente no cadastro.
+   * Empréstimo: por SEMANA (sugestão de 7,5%). Venda de produto: fixa sobre
+   * o valor financiado (sugestão de 20%). Ver `calculateFinancedAmount`.
    */
   interest_rate_percent: number;
+  /**
+   * Juros de atraso (% ao dia sobre principal_amount), copiado de
+   * Configurações no cadastro — mudar a configuração não altera contratos
+   * já existentes.
+   */
+  late_interest_rate_percent_per_day: number;
   /**
    * Data em que o dinheiro emprestado realmente saiu da conta — editada
    * manualmente pelo usuário. null = "ainda vai sair" (não debita o saldo
@@ -278,6 +284,7 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
 };
 
 export const PERIODICITY_LABELS: Record<Periodicity, string> = {
+  diaria: "Diária",
   semanal: "Semanal",
   quinzenal: "Quinzenal",
   mensal: "Mensal",
@@ -316,3 +323,18 @@ export const PHONE_STATUS_LABELS: Record<PhoneStatus, string> = {
   estoque: "Em estoque",
   vendido: "Vendido",
 };
+
+/** Como o botão de cobrança abre o WhatsApp. */
+export type WhatsAppOpenMode = "padrao" | "business_android" | "web";
+
+/** Configurações gerais do negócio (uma linha por usuário). */
+export interface BusinessSettings {
+  owner_id: string;
+  /** Padrão copiado para cada contrato novo (% ao dia). */
+  late_interest_rate_percent_per_day: number;
+  whatsapp_open_mode: WhatsAppOpenMode;
+  /** Número do WhatsApp Business da empresa — só exibido como lembrete junto ao botão. */
+  business_whatsapp_number: string | null;
+  created_at: string;
+  updated_at: string;
+}

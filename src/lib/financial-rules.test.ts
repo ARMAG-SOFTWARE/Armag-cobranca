@@ -36,7 +36,7 @@ describe("daysLate", () => {
 
 describe("calculateLateInterest", () => {
   const base = {
-    contractType: "emprestimo" as const,
+    lateInterestRatePercentPerDay: 1,
     originalPrincipalAmount: 1000,
     status: "atrasado" as const,
     paidInterestAmount: 0,
@@ -53,9 +53,24 @@ describe("calculateLateInterest", () => {
     expect(result).toBe(60);
   });
 
-  it("venda de iPhone nunca gera juros de atraso, mesmo vencida há dias", () => {
-    const result = calculateLateInterest({ ...base, contractType: "venda_iphone", dueDate: "2026-01-15" }, REF);
+  it("usa a taxa diária gravada no contrato (configurável)", () => {
+    // 6 dias x 2,5% x R$1000 = R$150.
+    const result = calculateLateInterest({ ...base, lateInterestRatePercentPerDay: 2.5, dueDate: "2026-01-15" }, REF);
+    expect(result).toBe(150);
+  });
+
+  it("taxa 0 não gera juros de atraso", () => {
+    const result = calculateLateInterest({ ...base, lateInterestRatePercentPerDay: 0, dueDate: "2026-01-15" }, REF);
     expect(result).toBe(0);
+  });
+
+  it("vale também para venda de produto (pods): base é o valor total do contrato", () => {
+    // Pod de R$100, 3 dias de atraso a 1%/dia = R$3.
+    const result = calculateLateInterest(
+      { ...base, originalPrincipalAmount: 100, dueDate: "2026-01-18" },
+      REF,
+    );
+    expect(result).toBe(3);
   });
 
   it("cenário 6: parcela já totalmente paga nunca gera juros", () => {
@@ -103,31 +118,85 @@ describe("splitPayment", () => {
 });
 
 describe("calculateFinancedAmount", () => {
-  it("empréstimo: taxa manual x parcelas, aplicada uma única vez", () => {
-    const result = calculateFinancedAmount({
-      contractType: "emprestimo",
-      principalAmount: 1000,
-      installmentsCount: 4,
-      hasDownPayment: false,
-      downPaymentAmount: 0,
-      interestRatePercentPerInstallment: 7.5,
-    });
-    expect(result.ratePercent).toBe(30);
-    expect(result.markupAmount).toBe(300);
-    expect(result.totalFinanced).toBe(1300);
+  const loan = {
+    contractType: "emprestimo" as const,
+    principalAmount: 1000,
+    hasDownPayment: false,
+    downPaymentAmount: 0,
+    interestRatePercent: 7.5,
+  };
+
+  it.each([
+    // [parcelas, periodicidade, % total, total financiado]
+    [4, "semanal", 30, 1300],
+    [28, "diaria", 30, 1300],
+    [2, "quinzenal", 30, 1300],
+    [1, "mensal", 30, 1300],
+    [3, "mensal", 90, 1900],
+    [7, "diaria", 7.5, 1075],
+  ] as const)("empréstimo: 7,5%%/semana com %i parcela(s) %s = %d%%", (count, periodicity, ratePercent, total) => {
+    const result = calculateFinancedAmount({ ...loan, installmentsCount: count, periodicity });
+    expect(result.ratePercent).toBe(ratePercent);
+    expect(result.totalFinanced).toBe(total);
   });
 
-  it("venda de iPhone nunca tem juros automático, mesmo com uma taxa informada", () => {
+  it("empréstimo diário proporcional: 10 diárias = 7,5% ÷ 7 × 10, sem arredondar a taxa antes", () => {
+    const result = calculateFinancedAmount({ ...loan, installmentsCount: 10, periodicity: "diaria" });
+    expect(result.ratePercent).toBe(10.71);
+    expect(result.markupAmount).toBe(107.14);
+    expect(result.totalFinanced).toBe(1107.14);
+  });
+
+  it("empréstimo: a taxa semanal é editável", () => {
+    const result = calculateFinancedAmount({ ...loan, interestRatePercent: 10, installmentsCount: 4, periodicity: "semanal" });
+    expect(result.totalFinanced).toBe(1400);
+  });
+
+  it("venda de produto (pods): juros fixo, independente de parcelas e periodicidade", () => {
+    for (const [installmentsCount, periodicity] of [
+      [4, "semanal"],
+      [28, "diaria"],
+      [1, "mensal"],
+    ] as const) {
+      const result = calculateFinancedAmount({
+        contractType: "venda_iphone",
+        principalAmount: 100,
+        installmentsCount,
+        periodicity,
+        hasDownPayment: false,
+        downPaymentAmount: 0,
+        interestRatePercent: 20,
+      });
+      expect(result.ratePercent).toBe(20);
+      expect(result.totalFinanced).toBe(120);
+    }
+  });
+
+  it("venda de produto: juros incide sobre o valor menos a entrada", () => {
+    const result = calculateFinancedAmount({
+      contractType: "venda_iphone",
+      principalAmount: 100,
+      installmentsCount: 4,
+      periodicity: "semanal",
+      hasDownPayment: true,
+      downPaymentAmount: 40,
+      interestRatePercent: 20,
+    });
+    expect(result.financedBase).toBe(60);
+    expect(result.markupAmount).toBe(12);
+    expect(result.totalFinanced).toBe(72);
+  });
+
+  it("venda de produto sem juros quando a taxa é 0", () => {
     const result = calculateFinancedAmount({
       contractType: "venda_iphone",
       principalAmount: 1000,
       installmentsCount: 4,
+      periodicity: "semanal",
       hasDownPayment: false,
       downPaymentAmount: 0,
-      interestRatePercentPerInstallment: 50,
+      interestRatePercent: 0,
     });
-    expect(result.ratePercent).toBe(0);
-    expect(result.markupAmount).toBe(0);
     expect(result.totalFinanced).toBe(1000);
   });
 });

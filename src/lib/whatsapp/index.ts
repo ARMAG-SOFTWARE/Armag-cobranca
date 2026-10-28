@@ -32,6 +32,7 @@ export async function sendCollectionReminder(
     type: "emprestimo" | "venda_iphone";
     principal_amount: number;
     installments_count: number;
+    late_interest_rate_percent_per_day: number;
     client: { id: string; name: string; phone: string };
   };
   const client = contract.client;

@@ -5,7 +5,10 @@ import type { Client, Contract, Installment } from "@/lib/types";
 
 export interface DebtorInstallmentRow {
   installment: Installment;
-  contract: Pick<Contract, "id" | "type" | "description" | "installments_count" | "principal_amount">;
+  contract: Pick<
+    Contract,
+    "id" | "type" | "description" | "installments_count" | "principal_amount" | "late_interest_rate_percent_per_day"
+  >;
   outstandingPrincipal: number;
   interestOwed: number;
   totalDue: number;
@@ -41,8 +44,10 @@ export interface LateInterestDetailRow {
   installmentsCount: number;
   dueDate: string;
   daysLate: number;
-  /** Valor originalmente emprestado no contrato — base do juros de atraso. */
+  /** Valor total do contrato (emprestado ou do produto) — base do juros de atraso. */
   originalPrincipalAmount: number;
+  /** Juros de atraso do contrato, em % ao dia. */
+  lateInterestRatePercentPerDay: number;
   interestOwed: number;
 }
 
@@ -68,6 +73,7 @@ export function getLateInterestBreakdown(debtors: Debtor[]): LateInterestDetailR
         dueDate: row.installment.due_date,
         daysLate: row.daysLate,
         originalPrincipalAmount: row.contract.principal_amount,
+        lateInterestRatePercentPerDay: row.contract.late_interest_rate_percent_per_day,
         interestOwed: row.interestOwed,
       });
     }
@@ -106,7 +112,7 @@ export async function getTodayDebtors(
     supabase
       .from("installments")
       .select(
-        "*, contract:contracts(id, type, status, description, installments_count, principal_amount, client:clients(*))",
+        "*, contract:contracts(id, type, status, description, installments_count, principal_amount, late_interest_rate_percent_per_day, client:clients(*))",
       )
       .in("status", ["pendente", "atrasado", "parcial"])
       .lte("due_date", todayStr),
@@ -122,7 +128,10 @@ export async function getTodayDebtors(
   ]);
 
   type InstallmentRow = Installment & {
-    contract: Pick<Contract, "id" | "type" | "status" | "description" | "installments_count" | "principal_amount"> & {
+    contract: Pick<
+      Contract,
+      "id" | "type" | "status" | "description" | "installments_count" | "principal_amount" | "late_interest_rate_percent_per_day"
+    > & {
       client: Client;
     };
   };
@@ -143,7 +152,7 @@ export async function getTodayDebtors(
     if (outstandingPrincipal <= 0) continue;
 
     const interestOwed = calculateLateInterest({
-      contractType: installment.contract.type,
+      lateInterestRatePercentPerDay: installment.contract.late_interest_rate_percent_per_day,
       originalPrincipalAmount: installment.contract.principal_amount,
       dueDate: installment.due_date,
       status: installment.status,

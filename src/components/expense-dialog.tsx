@@ -74,7 +74,7 @@ export function ExpenseDialog() {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Registrar saída</DialogTitle>
-          <DialogDescription>Combustível, compra de celular, manutenção, despesa pessoal, etc.</DialogDescription>
+          <DialogDescription>Combustível, compra de estoque, manutenção, despesa pessoal, etc.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="grid gap-4">

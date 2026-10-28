@@ -49,6 +49,7 @@ function contract(overrides: Record<string, unknown> = {}) {
     description: null,
     installments_count: 4,
     principal_amount: 1000,
+    late_interest_rate_percent_per_day: 1,
     ...overrides,
   };
 }

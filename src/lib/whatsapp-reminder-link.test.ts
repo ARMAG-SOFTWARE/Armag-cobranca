@@ -170,7 +170,7 @@ describe("buildConsolidatedWhatsAppReminderLink", () => {
 
 describe("buildWhatsAppReminderLink (lembrete de parcela única)", () => {
   const client = { phone: "11999998888" };
-  const contract = { type: "emprestimo" as const, principal_amount: 1000, installments_count: 4 };
+  const contract = { type: "emprestimo" as const, principal_amount: 1000, installments_count: 4, late_interest_rate_percent_per_day: 1 };
 
   it("telefone inválido retorna erro", () => {
     const result = buildWhatsAppReminderLink(

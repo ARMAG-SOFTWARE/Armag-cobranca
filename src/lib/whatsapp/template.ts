@@ -18,7 +18,7 @@ import type { Client, Contract, Installment } from "@/lib/types";
 export function renderReminderMessage(
   template: string,
   client: Pick<Client, "name">,
-  contract: Pick<Contract, "type" | "principal_amount">,
+  contract: Pick<Contract, "type" | "principal_amount" | "late_interest_rate_percent_per_day">,
   installment: Pick<
     Installment,
     "number" | "amount" | "due_date" | "status" | "paid_principal_amount" | "paid_interest_amount"
@@ -27,7 +27,7 @@ export function renderReminderMessage(
 ) {
   const outstandingPrincipal = roundCents(Math.max(installment.amount - installment.paid_principal_amount, 0));
   const lateInterestOwed = calculateLateInterest({
-    contractType: contract.type,
+    lateInterestRatePercentPerDay: contract.late_interest_rate_percent_per_day,
     originalPrincipalAmount: contract.principal_amount,
     dueDate: installment.due_date,
     status: installment.status,

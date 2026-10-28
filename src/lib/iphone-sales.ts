@@ -15,11 +15,13 @@ export interface IphoneSale {
     | "down_payment_amount"
   >;
   client: Pick<Client, "id" | "name" | "phone">;
-  /** Valor da venda (contract.principal_amount) − custo do aparelho. Nunca depende do que já foi recebido. */
+  /** Juros da venda (total a receber − valor da venda). 0 numa venda sem juros. */
+  interest: number;
+  /** Valor da venda + juros da venda − custo do produto. Nunca depende do que já foi recebido. */
   profit: number;
   /** Soma de tudo já pago pelo cliente nesta venda (entrada + parcelas). */
   received: number;
-  /** Valor da venda − recebido, nunca negativo. */
+  /** Valor da venda + juros − recebido, nunca negativo. */
   pending: number;
 }
 
@@ -27,7 +29,7 @@ export interface IphoneSalesSummary {
   count: number;
   totalCost: number;
   totalSaleValue: number;
-  /** totalSaleValue − totalCost. */
+  /** totalSaleValue + juros das vendas − totalCost. */
   totalProfit: number;
   totalReceived: number;
   totalPending: number;
@@ -81,14 +83,22 @@ export async function getIphoneSales(
     if (!phone.contract) continue;
 
     const saleValue = phone.sale_amount ?? phone.contract.principal_amount;
-    const profit = roundCents(saleValue - phone.cost_amount);
+    // Juros da venda = o que o cliente paga a mais que o valor do produto
+    // (parcelas + entrada − valor). Calculado do contrato salvo, nunca
+    // recalculado pela taxa atual.
+    const downPayment = phone.contract.has_down_payment ? phone.contract.down_payment_amount : 0;
+    const interest = roundCents(
+      Math.max(phone.contract.total_amount + downPayment - phone.contract.principal_amount, 0),
+    );
+    const profit = roundCents(saleValue + interest - phone.cost_amount);
     const received = receivedByContract.get(phone.contract.id) ?? 0;
-    const pending = roundCents(Math.max(saleValue - received, 0));
+    const pending = roundCents(Math.max(saleValue + interest - received, 0));
 
     sales.push({
       phone,
       contract: phone.contract,
       client: phone.contract.client,
+      interest,
       profit,
       received,
       pending,

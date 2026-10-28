@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { StatTile } from "@/components/ui/stat-tile";
 import type { LateInterestDetailRow } from "@/lib/debtors";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatPercent } from "@/lib/utils";
 
 /**
  * Card "Juros de atraso" clicável: mostra o total pendente e, ao clicar,
@@ -42,7 +42,7 @@ export function LateInterestCard({
         <DialogHeader>
           <DialogTitle>Detalhamento dos juros de atraso</DialogTitle>
           <DialogDescription>
-            1% ao dia sobre o valor originalmente emprestado, somente para parcelas vencidas e ainda não pagas.
+            Taxa diária de cada contrato sobre o valor total do contrato, somente para parcelas vencidas e ainda não pagas.
           </DialogDescription>
         </DialogHeader>
 
@@ -70,7 +70,8 @@ export function LateInterestCard({
                   {row.daysLate} dia{row.daysLate > 1 ? "s" : ""} de atraso
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  Valor originalmente emprestado: {formatCurrency(row.originalPrincipalAmount)} · 1% ao dia
+                  Valor do contrato: {formatCurrency(row.originalPrincipalAmount)} ·{" "}
+                  {formatPercent(row.lateInterestRatePercentPerDay)}% ao dia
                 </span>
               </Link>
             ))}

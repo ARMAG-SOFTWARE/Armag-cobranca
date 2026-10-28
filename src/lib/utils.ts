@@ -12,6 +12,11 @@ export function formatCurrency(value: number) {
   }).format(value);
 }
 
+/** Percentual no formato brasileiro, até 2 casas (ex.: 1,5). */
+export function formatPercent(value: number) {
+  return value.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+}
+
 export function formatDate(value: string | Date) {
   const date = typeof value === "string" ? new Date(`${value}T00:00:00`) : value;
   return new Intl.DateTimeFormat("pt-BR", {

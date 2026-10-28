@@ -173,9 +173,10 @@ export function computeDashboardMetrics(
       contractType: contract.type,
       principalAmount: contract.principal_amount,
       installmentsCount: contract.installments_count,
+      periodicity: contract.periodicity,
       hasDownPayment: contract.has_down_payment,
       downPaymentAmount: contract.down_payment_amount,
-      interestRatePercentPerInstallment: contract.interest_rate_percent,
+      interestRatePercent: contract.interest_rate_percent,
     });
     markupRatioByContract.set(contract.id, contract.total_amount > 0 ? markupAmount / contract.total_amount : 0);
   }
@@ -256,6 +257,7 @@ export function computeDashboardMetrics(
   let phonesTotalCost = 0;
   let phonesTotalSaleValue = 0;
   let phonesTotalReceived = 0;
+  let phonesTotalInterest = 0;
 
   for (const phone of phones) {
     if (!phone.contract_id) continue;
@@ -265,11 +267,18 @@ export function computeDashboardMetrics(
     phonesCount += 1;
     phonesTotalCost = roundCents(phonesTotalCost + phone.cost_amount);
     phonesTotalSaleValue = roundCents(phonesTotalSaleValue + contract.principal_amount);
+    const downPayment = contract.has_down_payment ? contract.down_payment_amount : 0;
+    phonesTotalInterest = roundCents(
+      phonesTotalInterest + Math.max(contract.total_amount + downPayment - contract.principal_amount, 0),
+    );
     phonesTotalReceived = roundCents(phonesTotalReceived + (receivedByContract.get(phone.contract_id) ?? 0));
   }
 
-  const phonesTotalProfit = roundCents(phonesTotalSaleValue - phonesTotalCost);
-  const phonesTotalPending = roundCents(Math.max(phonesTotalSaleValue - phonesTotalReceived, 0));
+  // Juros da venda de produto entra no lucro e no que falta receber.
+  const phonesTotalProfit = roundCents(phonesTotalSaleValue + phonesTotalInterest - phonesTotalCost);
+  const phonesTotalPending = roundCents(
+    Math.max(phonesTotalSaleValue + phonesTotalInterest - phonesTotalReceived, 0),
+  );
 
   return {
     loans: {

@@ -11,6 +11,9 @@ export interface GeneratedInstallment {
 
 function addPeriod(date: Date, periodicity: Periodicity, periods: number) {
   switch (periodicity) {
+    case "diaria":
+      // Todo dia corrido, inclusive fim de semana e feriado.
+      return addDays(date, periods);
     case "semanal":
       return addDays(date, periods * 7);
     case "quinzenal":
@@ -51,6 +54,17 @@ export function generateInstallments(params: {
     amount,
     due_date: format(addPeriod(firstDate, periodicity, index), "yyyy-MM-dd"),
   }));
+}
+
+/** Dias corridos entre o 1º e o último vencimento de um parcelamento. */
+export function installmentPlanSpanDays(params: {
+  installmentsCount: number;
+  periodicity: Periodicity;
+  firstDueDate: string;
+}): number {
+  const firstDate = parseISO(params.firstDueDate);
+  const lastDate = addPeriod(firstDate, params.periodicity, Math.max(params.installmentsCount - 1, 0));
+  return Math.round((lastDate.getTime() - firstDate.getTime()) / 86_400_000);
 }
 
 export function isOverdue(dueDate: string, referenceDate: Date = new Date()) {

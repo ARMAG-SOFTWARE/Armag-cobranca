@@ -1,31 +1,48 @@
 import { daysBetweenDateStrings, getBusinessToday } from "@/lib/date-utils";
-import type { ContractType, InstallmentStatus } from "@/lib/types";
+import type { ContractType, InstallmentStatus, Periodicity } from "@/lib/types";
 
 /**
  * Todas as regras de rentabilidade do negócio ficam centralizadas aqui para
  * evitar que cálculos divergentes apareçam em telas diferentes (dashboard,
  * criação de contrato, tela de pagamento).
  *
- * Empréstimo: juros CONTRATUAL escolhido manualmente pelo usuário a cada
- * cadastro (`contracts.interest_rate_percent`, sugestão inicial de 7,5% no
- * formulário), por parcela, ACUMULATIVO — o percentual total cresce com a
- * quantidade de parcelas (percentual = quantidadeParcelas × taxa digitada;
- * ex.: taxa de 7,5% com 4 parcelas = 30%, com 8 parcelas = 60%). Esse
- * percentual é aplicado UMA ÚNICA VEZ sobre o valor emprestado, e o total
- * resultante é dividido igualmente entre as parcelas — nunca recalculado
- * por parcela, nem depois de salvo (mudar a taxa não afeta contratos já
- * cadastrados, só os próximos).
+ * Empréstimo: juros CONTRATUAL definido POR SEMANA, escolhido manualmente a
+ * cada cadastro (`contracts.interest_rate_percent`, sugestão de 7,5% por
+ * semana). O percentual total é taxa semanal × duração do contrato em
+ * semanas, e a duração vem da periodicidade de cada parcela
+ * (`WEEKS_PER_INSTALLMENT`): diária = 1/7 de semana (7,5% ÷ 7 por dia),
+ * semanal = 1, quinzenal = 2, mensal = 4 (um mês = 30% com 7,5%/semana).
+ * Ex.: 4 semanais = 30%; 28 diárias = 30%; 2 quinzenais = 30%; 1 mensal =
+ * 30%. Esse percentual é aplicado UMA ÚNICA VEZ sobre o valor emprestado e o
+ * total é dividido igualmente entre as parcelas — nunca recalculado depois
+ * de salvo.
  *
- * Venda de iPhone: SEM juros automático — o valor digitado pelo usuário é
- * exatamente o que é dividido em parcelas (o lucro da venda do aparelho é
- * rastreado à parte, no módulo de estoque/Celulares).
+ * Venda de produto (pods; valor interno `venda_iphone`): juros FIXO
+ * (sugestão de 20%, editável no cadastro), aplicado uma única vez sobre o
+ * valor do produto menos a entrada — não depende da quantidade de parcelas.
  *
- * Este juros do empréstimo é totalmente independente do juros de atraso
- * (1%/dia, `LATE_INTEREST_RATE_PER_DAY`) — nunca são somados na mesma
- * fórmula; o de atraso só incide se uma parcela não for paga no vencimento.
+ * Juros de atraso: percentual POR DIA sobre o valor total do contrato
+ * (`contracts.principal_amount`), para empréstimo e venda de produto. A
+ * taxa padrão fica em Configurações e é COPIADA para o contrato no cadastro
+ * (`contracts.late_interest_rate_percent_per_day`) — mudar a configuração
+ * depois nunca altera contratos já existentes. Nunca é somado ao juros
+ * contratual na mesma fórmula; só incide se a parcela não for paga no
+ * vencimento.
  */
 export const DEFAULT_LOAN_INTEREST_RATE_PERCENT = 7.5;
-export const LATE_INTEREST_RATE_PER_DAY = 0.01;
+export const DEFAULT_PRODUCT_INTEREST_RATE_PERCENT = 20;
+export const DEFAULT_LATE_INTEREST_RATE_PERCENT_PER_DAY = 1;
+
+/** Quantas semanas cada parcela representa, por periodicidade. */
+export const WEEKS_PER_INSTALLMENT: Record<Periodicity, number> = {
+  diaria: 1 / 7,
+  semanal: 1,
+  quinzenal: 2,
+  mensal: 4,
+};
+
+/** Venda de produto (pods): todas as parcelas cabem em até 4 semanas a partir do 1º vencimento. */
+export const PRODUCT_SALE_MAX_WEEKS = 4;
 
 /** Arredonda para centavos passando por inteiro, evitando erro de ponto flutuante. */
 export function roundCents(value: number): number {
@@ -36,55 +53,58 @@ export interface FinancedAmountInput {
   contractType: ContractType;
   /** Valor original do produto/empréstimo, antes de qualquer juros. */
   principalAmount: number;
-  /** Quantidade de parcelas/semanas — define o percentual acumulado do empréstimo. */
+  /** Quantidade de parcelas — junto com a periodicidade, define a duração em semanas do empréstimo. */
   installmentsCount: number;
-  /** Só relevante para venda de iPhone. */
+  periodicity: Periodicity;
+  /** Só relevante para venda de produto. */
   hasDownPayment: boolean;
   /** Valor recebido à vista, fora das parcelas (ignorado se hasDownPayment = false). */
   downPaymentAmount: number;
   /**
-   * Taxa de juros por parcela (%), escolhida manualmente pelo usuário no
-   * cadastro do empréstimo (`contracts.interest_rate_percent`). Ignorada
-   * para venda de iPhone — venda nunca tem juros automático, seja qual for
-   * o valor recebido aqui.
+   * Taxa escolhida no cadastro (`contracts.interest_rate_percent`).
+   * Empréstimo: percentual POR SEMANA. Venda de produto: percentual fixo
+   * sobre o valor financiado.
    */
-  interestRatePercentPerInstallment: number;
+  interestRatePercent: number;
 }
 
 export interface FinancedAmountResult {
   /** Base sobre a qual os juros incidem (principal menos a entrada, se houver). */
   financedBase: number;
-  /** Valor dos juros do empréstimo (0 para venda de iPhone). */
+  /** Valor dos juros contratuais. */
   markupAmount: number;
   /** financedBase + markupAmount — é isto que é dividido em parcelas. */
   totalFinanced: number;
-  /** Taxa efetivamente aplicada, como fração (ex.: 0,6 para 60%). 0 para venda de iPhone. */
+  /** Taxa efetivamente aplicada, como fração (ex.: 0,3 para 30%), sem arredondamento. */
   rate: number;
-  /** A mesma taxa, em percentual, já arredondada para exibição (ex.: 60, 22.5). */
+  /** A mesma taxa, em percentual, arredondada para exibição (ex.: 30, 10.71). */
   ratePercent: number;
 }
 
+/** Duração do contrato em semanas (pode ser fracionária para parcelas diárias). */
+export function contractDurationWeeks(installmentsCount: number, periodicity: Periodicity): number {
+  return installmentsCount * WEEKS_PER_INSTALLMENT[periodicity];
+}
+
 /**
- * Calcula o valor final a ser financiado (dividido em parcelas). Para
- * empréstimo, o percentual de juros é quantidadeParcelas × taxa manual do
- * cadastro (`interestRatePercentPerInstallment`) — calculado e aplicado UMA
- * ÚNICA VEZ sobre o valor emprestado, nunca por parcela — e o total
- * resultante é então dividido em partes iguais (a divisão em si é feita
+ * Calcula o valor final a ser financiado (dividido em parcelas), aplicando
+ * o juros contratual UMA ÚNICA VEZ — empréstimo: taxa semanal × duração em
+ * semanas; venda de produto: taxa fixa. A divisão em parcelas é feita
  * depois, por `splitAmount`, que ajusta a última parcela para a soma bater
- * exatamente com o total).
+ * exatamente com o total.
  */
 export function calculateFinancedAmount(input: FinancedAmountInput): FinancedAmountResult {
   const downPayment = input.hasDownPayment ? Math.max(input.downPaymentAmount, 0) : 0;
   const financedBase = roundCents(Math.max(input.principalAmount - downPayment, 0));
-  const ratePercent =
+  const ratePercentExact =
     input.contractType === "emprestimo"
-      ? Math.round(input.installmentsCount * input.interestRatePercentPerInstallment * 100) / 100
-      : 0;
-  const rate = ratePercent / 100;
+      ? contractDurationWeeks(input.installmentsCount, input.periodicity) * input.interestRatePercent
+      : input.interestRatePercent;
+  const rate = Math.max(ratePercentExact, 0) / 100;
   const markupAmount = roundCents(financedBase * rate);
   const totalFinanced = roundCents(financedBase + markupAmount);
 
-  return { financedBase, markupAmount, totalFinanced, rate, ratePercent };
+  return { financedBase, markupAmount, totalFinanced, rate, ratePercent: roundCents(rate * 100) };
 }
 
 /**
@@ -101,19 +121,15 @@ export function daysLate(dueDate: string, referenceDate: Date = new Date()): num
 
 export interface LateInterestInstallmentInput {
   /**
-   * Juros de atraso é regra EXCLUSIVA de empréstimo — venda de iPhone nunca
-   * gera juros de atraso (item 10 do pedido: "essas regras pertencem
-   * exclusivamente aos empréstimos"). Uma parcela de venda de iPhone em
-   * atraso continua aparecendo como pendente/atrasada, só que sem nenhum
-   * acréscimo — o lucro dela vem exclusivamente de venda − custo.
+   * Percentual de juros de atraso POR DIA gravado no contrato no cadastro
+   * (`contracts.late_interest_rate_percent_per_day`, ex.: 1 = 1% ao dia).
+   * Vale para empréstimo e venda de produto.
    */
-  contractType: ContractType;
+  lateInterestRatePercentPerDay: number;
   /**
-   * Valor originalmente emprestado no CONTRATO (`contracts.principal_amount`)
-   * — base do juros de atraso. NUNCA o valor da parcela, nem o saldo em
-   * aberto dela: o juros de atraso é 1% ao dia sobre o valor total que foi
-   * emprestado ao cliente, independente de quanto já foi pago daquela
-   * parcela especificamente.
+   * Valor total do CONTRATO (`contracts.principal_amount`: valor emprestado
+   * ou valor do produto) — base do juros de atraso. NUNCA o valor da
+   * parcela, nem o saldo em aberto dela.
    */
   originalPrincipalAmount: number;
   dueDate: string;
@@ -131,39 +147,32 @@ export interface LateInterestInstallmentInput {
 }
 
 /**
- * Juros de 1% ao dia sobre o valor ORIGINALMENTE EMPRESTADO no contrato
- * (nunca sobre o valor da parcela nem sobre o saldo em aberto dela),
- * calculados a partir da diferença entre due_date e a data de referência,
- * MENOS o que já foi efetivamente pago de juros nesta parcela — o
- * resultado é sempre o juros PENDENTE agora, nunca o juros bruto acumulado
- * desde o vencimento. Só se aplica a empréstimos — venda de iPhone nunca
- * gera juros de atraso.
+ * Juros de atraso: percentual diário do contrato sobre o valor total do
+ * contrato (nunca sobre o valor da parcela nem sobre o saldo em aberto
+ * dela), calculado a partir da diferença entre due_date e a data de
+ * referência, MENOS o que já foi efetivamente pago de juros nesta parcela —
+ * o resultado é sempre o juros PENDENTE agora, nunca o bruto acumulado.
  *
  * É uma função PURA e idempotente — parte sempre de due_date/hoje, do valor
- * original do contrato e do juros já pago (nunca de um juros pendente
- * calculado anteriormente) — por isso é segura para chamar a cada
- * renderização de tela sem risco de "juros sobre juros": abrir a tela de
- * novo no mesmo dia sempre devolve o mesmo valor, nunca soma em cima do que
- * já tinha sido mostrado antes. Cada parcela usa sua própria due_date e seu
- * próprio paidInterestAmount, então parcelas diferentes do mesmo contrato
- * (mesmo que atrasadas ao mesmo tempo) nunca se misturam.
+ * original do contrato e do juros já pago — por isso é segura para chamar a
+ * cada renderização sem risco de "juros sobre juros". Cada parcela usa sua
+ * própria due_date e seu próprio paidInterestAmount.
  */
 export function calculateLateInterest(
   installment: LateInterestInstallmentInput,
   referenceDate: Date = new Date(),
 ): number {
-  if (installment.contractType !== "emprestimo") {
-    return 0;
-  }
-
   if (installment.status === "pago") {
     return 0;
   }
 
+  const ratePerDay = Math.max(installment.lateInterestRatePercentPerDay, 0) / 100;
+  if (ratePerDay === 0) return 0;
+
   const days = daysLate(installment.dueDate, referenceDate);
   if (days <= 0) return 0;
 
-  const grossInterest = roundCents(installment.originalPrincipalAmount * LATE_INTEREST_RATE_PER_DAY * days);
+  const grossInterest = roundCents(installment.originalPrincipalAmount * ratePerDay * days);
   return roundCents(Math.max(grossInterest - installment.paidInterestAmount, 0));
 }
 

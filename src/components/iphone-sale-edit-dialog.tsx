@@ -87,7 +87,7 @@ export function IphoneSaleEditDialog({ sale }: { sale: IphoneSale }) {
         <form onSubmit={onSubmit} className="grid gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="model">Produto</Label>
-            <Input id="model" placeholder="Ex: iPhone 16 Pro, Sofá 3 lugares" {...register("model")} />
+            <Input id="model" placeholder="Ex: Pod descartável, sabor menta" {...register("model")} />
             {errors.model && <p className="text-xs text-destructive">{errors.model.message}</p>}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">

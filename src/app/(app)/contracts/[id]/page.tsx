@@ -46,9 +46,10 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
     contractType: contract.type,
     principalAmount: contract.principal_amount,
     installmentsCount: contract.installments_count,
+    periodicity: contract.periodicity,
     hasDownPayment: contract.has_down_payment,
     downPaymentAmount: contract.down_payment_amount,
-    interestRatePercentPerInstallment: contract.interest_rate_percent,
+    interestRatePercent: contract.interest_rate_percent,
   });
 
   // Valor da parcela lido da parcela real já persistida (não recalculado do
@@ -140,16 +141,20 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
                 <dd className="font-medium">{formatCurrency(contract.down_payment_amount)}</dd>
               </div>
             )}
-            {contract.type === "emprestimo" ? (
+            {contract.type === "emprestimo" || markupAmount > 0 ? (
               <>
                 <div>
-                  <dt className="text-muted-foreground">Juros por parcela</dt>
+                  <dt className="text-muted-foreground">
+                    {contract.type === "emprestimo" ? "Juros por semana" : "Juros da venda"}
+                  </dt>
                   <dd className="font-medium">{contract.interest_rate_percent}%</dd>
                 </div>
-                <div>
-                  <dt className="text-muted-foreground">Juros acumulado</dt>
-                  <dd className="font-medium">{ratePercent}%</dd>
-                </div>
+                {contract.type === "emprestimo" && (
+                  <div>
+                    <dt className="text-muted-foreground">Juros acumulado</dt>
+                    <dd className="font-medium">{ratePercent}%</dd>
+                  </div>
+                )}
                 <div>
                   <dt className="text-muted-foreground">Valor dos juros</dt>
                   <dd className="font-medium">{formatCurrency(markupAmount)}</dd>
@@ -160,6 +165,10 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
                 </div>
               </>
             ) : null}
+            <div>
+              <dt className="text-muted-foreground">Juros de atraso</dt>
+              <dd className="font-medium">{contract.late_interest_rate_percent_per_day}% ao dia</dd>
+            </div>
             <div>
               <dt className="text-muted-foreground">{contract.type === "emprestimo" ? "Total a receber" : "Total previsto"}</dt>
               <dd className="font-semibold text-accent-cyan">{formatCurrency(contract.total_amount)}</dd>

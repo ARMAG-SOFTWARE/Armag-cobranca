@@ -23,13 +23,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { getBusinessToday } from "@/lib/date-utils";
 import { splitAmount } from "@/lib/installments";
-import { calculateFinancedAmount, roundCents, DEFAULT_LOAN_INTEREST_RATE_PERCENT } from "@/lib/financial-rules";
+import {
+  calculateFinancedAmount,
+  contractDurationWeeks,
+  roundCents,
+  DEFAULT_LOAN_INTEREST_RATE_PERCENT,
+  DEFAULT_PRODUCT_INTEREST_RATE_PERCENT,
+  PRODUCT_SALE_MAX_WEEKS,
+} from "@/lib/financial-rules";
 import { formatCurrency } from "@/lib/utils";
 import { PAYMENT_METHOD_LABELS } from "@/lib/types";
 import { transactionSchema, type TransactionInput } from "@/lib/validations";
 import { createTransaction } from "@/app/actions";
 
 const today = () => getBusinessToday();
+
+/** Semanas com até 2 casas, no formato brasileiro (ex.: 1,43). */
+function formatWeeks(weeks: number) {
+  return weeks.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+}
 
 export function NewTransactionDialog() {
   const [open, setOpen] = useState(false);
@@ -40,7 +52,6 @@ export function NewTransactionDialog() {
     control,
     handleSubmit,
     watch,
-    getValues,
     reset,
     setValue,
     formState: { errors, isSubmitting },
@@ -71,7 +82,9 @@ export function NewTransactionDialog() {
   const downPaymentAmount = hasDownPayment ? Number(watch("downPaymentAmount")) || 0 : 0;
   const installmentsCount = Number(watch("installmentsCount")) || 1;
   const phoneCostAmount = isIphoneSale ? Number(watch("phoneCostAmount")) || 0 : 0;
-  const interestRatePercent = isLoan ? Number(watch("interestRatePercent")) || 0 : 0;
+  const periodicity = watch("periodicity");
+  const interestRatePercent = Number(watch("interestRatePercent")) || 0;
+  const durationWeeks = contractDurationWeeks(installmentsCount, periodicity);
 
   const { totalFinanced, markupAmount, ratePercent } =
     totalAmount > 0
@@ -79,16 +92,20 @@ export function NewTransactionDialog() {
           contractType: type,
           principalAmount: totalAmount,
           installmentsCount,
+          periodicity,
           hasDownPayment,
           downPaymentAmount,
-          interestRatePercentPerInstallment: interestRatePercent,
+          interestRatePercent,
         })
       : { totalFinanced: 0, markupAmount: 0, ratePercent: 0 };
 
   const previewAmounts =
     totalFinanced > 0 && installmentsCount > 0 ? splitAmount(totalFinanced, installmentsCount) : [];
 
-  const iphoneProfit = isIphoneSale && totalAmount > 0 ? roundCents(totalAmount - phoneCostAmount) : 0;
+  // Lucro da venda inclui o juros da venda: tudo o que o cliente vai pagar
+  // (entrada + parcelas) menos o custo do produto.
+  const iphoneProfit =
+    isIphoneSale && totalAmount > 0 ? roundCents(totalFinanced + downPaymentAmount - phoneCostAmount) : 0;
 
   // Entrada e detalhes do iPhone só existem para venda de iPhone: ao trocar
   // o tipo, zera esses campos para não deixar um valor "fantasma" que
@@ -105,17 +122,18 @@ export function NewTransactionDialog() {
     }
   }, [isIphoneSale, setValue]);
 
-  // Taxa de juros e data de saída só existem para empréstimo — ao trocar
-  // para venda de produto, zera para não deixar um valor "fantasma" que
-  // reprovaria a validação (venda nunca tem juros automático).
+  // Cada tipo tem a sua sugestão de juros (empréstimo: 7,5% por semana;
+  // venda de produto: 20% fixo) — ao trocar o tipo, volta para a sugestão
+  // dele. Data de saída do dinheiro só existe para empréstimo.
   useEffect(() => {
+    setValue(
+      "interestRatePercent",
+      isLoan ? DEFAULT_LOAN_INTEREST_RATE_PERCENT : DEFAULT_PRODUCT_INTEREST_RATE_PERCENT,
+    );
     if (!isLoan) {
-      setValue("interestRatePercent", undefined);
       setValue("disbursedAt", "");
-    } else if (getValues("interestRatePercent") === undefined) {
-      setValue("interestRatePercent", DEFAULT_LOAN_INTEREST_RATE_PERCENT);
     }
-  }, [isLoan, setValue, getValues]);
+  }, [isLoan, setValue]);
 
   const onSubmit = handleSubmit(async (data) => {
     const result = await createTransaction(data);
@@ -189,7 +207,7 @@ export function NewTransactionDialog() {
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="description">Descrição (opcional)</Label>
-              <Input id="description" placeholder="Ex: iPhone 13 Pro, Sofá 3 lugares" {...register("description")} />
+              <Input id="description" placeholder="Ex: Pod descartável, sabor menta" {...register("description")} />
             </div>
           </div>
 
@@ -255,7 +273,7 @@ export function NewTransactionDialog() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
                   <Label htmlFor="phoneModel">Nome do produto</Label>
-                  <Input id="phoneModel" placeholder="Ex: iPhone 13 Pro, Sofá 3 lugares" {...register("phoneModel")} />
+                  <Input id="phoneModel" placeholder="Ex: Pod descartável, sabor menta" {...register("phoneModel")} />
                   {errors.phoneModel && <p className="text-xs text-destructive">{errors.phoneModel.message}</p>}
                 </div>
                 <div className="grid gap-1.5">
@@ -320,6 +338,11 @@ export function NewTransactionDialog() {
               {errors.installmentsCount && (
                 <p className="text-xs text-destructive">{errors.installmentsCount.message}</p>
               )}
+              {isIphoneSale && !errors.installmentsCount && (
+                <p className="text-xs text-muted-foreground">
+                  Até {PRODUCT_SALE_MAX_WEEKS} semanas a partir do 1º vencimento.
+                </p>
+              )}
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="periodicity">Periodicidade</Label>
@@ -332,6 +355,7 @@ export function NewTransactionDialog() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="diaria">Diária</SelectItem>
                       <SelectItem value="semanal">Semanal</SelectItem>
                       <SelectItem value="quinzenal">Quinzenal</SelectItem>
                       <SelectItem value="mensal">Mensal</SelectItem>
@@ -348,25 +372,29 @@ export function NewTransactionDialog() {
             {errors.firstDueDate && <p className="text-xs text-destructive">{errors.firstDueDate.message}</p>}
           </div>
 
-          {isLoan && (
-            <div className="grid gap-4 rounded-md border p-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="interestRatePercent">Taxa de juros por parcela (%)</Label>
-                <Input
-                  id="interestRatePercent"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="7,5"
-                  {...register("interestRatePercent", { valueAsNumber: true })}
-                />
-                {errors.interestRatePercent && (
-                  <p className="text-xs text-destructive">{errors.interestRatePercent.message}</p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Sugestão: 7,5%. Multiplicado pela quantidade de parcelas (ex.: 4 parcelas = {roundCents(interestRatePercent * installmentsCount)}%).
-                </p>
-              </div>
+          <div className="grid gap-4 rounded-md border p-3 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="interestRatePercent">
+                {isLoan ? "Taxa de juros por semana (%)" : "Juros da venda (%)"}
+              </Label>
+              <Input
+                id="interestRatePercent"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder={isLoan ? "7,5" : "20"}
+                {...register("interestRatePercent", { valueAsNumber: true })}
+              />
+              {errors.interestRatePercent && (
+                <p className="text-xs text-destructive">{errors.interestRatePercent.message}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {isLoan
+                  ? `Sugestão: 7,5% por semana (${formatWeeks(DEFAULT_LOAN_INTEREST_RATE_PERCENT / 7)}% por dia). Este parcelamento = ${formatWeeks(durationWeeks)} semana(s) → ${roundCents(interestRatePercent * durationWeeks)}%.`
+                  : "Sugestão: 20%, aplicado uma única vez sobre o valor do produto (menos a entrada)."}
+              </p>
+            </div>
+            {isLoan && (
               <div className="grid gap-1.5">
                 <Label htmlFor="disbursedAt">Dinheiro já saiu da conta? (opcional)</Label>
                 <Input id="disbursedAt" type="date" max={today()} {...register("disbursedAt")} />
@@ -374,8 +402,8 @@ export function NewTransactionDialog() {
                   Deixe em branco se o dinheiro ainda vai saír — só debita o saldo geral de caixa depois de confirmado.
                 </p>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {previewAmounts.length > 0 && (
             <div className="grid gap-1 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
@@ -383,7 +411,9 @@ export function NewTransactionDialog() {
                 {type === "venda_iphone" ? "Valor do produto" : "Valor emprestado"}: {formatCurrency(totalAmount)}
                 {hasDownPayment && downPaymentAmount > 0 ? ` · Entrada: ${formatCurrency(downPaymentAmount)}` : ""}
                 {ratePercent > 0
-                  ? ` · Juros ${interestRatePercent}%/parcela × ${installmentsCount} = ${ratePercent}% (${formatCurrency(markupAmount)})`
+                  ? isLoan
+                    ? ` · Juros ${interestRatePercent}%/semana × ${formatWeeks(durationWeeks)} sem. = ${ratePercent}% (${formatCurrency(markupAmount)})`
+                    : ` · Juros ${ratePercent}% (${formatCurrency(markupAmount)})`
                   : ""}
               </p>
               <p className="font-medium text-foreground">

@@ -17,7 +17,7 @@ import { SettleContractDialog } from "@/components/settle-contract-dialog";
 import type { Debtor, DebtorInstallmentRow, PaidTodayRow } from "@/lib/debtors";
 import { roundCents } from "@/lib/financial-rules";
 import { CONTRACT_TYPE_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/types";
-import { formatCurrency, formatDate, formatDateTime, formatPhone, onlyDigits } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime, formatPercent, formatPhone, onlyDigits } from "@/lib/utils";
 import { buildConsolidatedWhatsAppReminderLink } from "@/lib/whatsapp-reminder-link";
 import { markReminderOpened } from "@/app/actions";
 
@@ -257,8 +257,9 @@ export function DebtorsView({ debtors, paidToday }: { debtors: Debtor[]; paidTod
                               </span>
                               {row.interestOwed > 0 && (
                                 <span className="text-xs text-muted-foreground">
-                                  Juros de atraso (1%/dia sobre o valor originalmente emprestado,{" "}
-                                  {formatCurrency(row.contract.principal_amount)}): {formatCurrency(row.interestOwed)}
+                                  Juros de atraso ({formatPercent(row.contract.late_interest_rate_percent_per_day)}%/dia
+                                  sobre o valor do contrato, {formatCurrency(row.contract.principal_amount)}):{" "}
+                                  {formatCurrency(row.interestOwed)}
                                 </span>
                               )}
                             </div>
@@ -269,7 +270,7 @@ export function DebtorsView({ debtors, paidToday }: { debtors: Debtor[]; paidTod
                               </div>
                               <RegisterPaymentDialog
                                 installment={row.installment}
-                                contractType={row.contract.type}
+                                lateInterestRatePercentPerDay={row.contract.late_interest_rate_percent_per_day}
                                 contractPrincipalAmount={row.contract.principal_amount}
                                 triggerLabel="Marcar como pago"
                                 clientName={debtor.client.name}

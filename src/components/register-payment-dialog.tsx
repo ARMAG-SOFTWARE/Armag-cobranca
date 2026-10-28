@@ -21,8 +21,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { calculateLateInterest, roundCents } from "@/lib/financial-rules";
-import { PAYMENT_METHOD_LABELS, type ContractType, type Installment } from "@/lib/types";
-import { formatCurrency } from "@/lib/utils";
+import { PAYMENT_METHOD_LABELS, type Installment } from "@/lib/types";
+import { formatCurrency, formatPercent } from "@/lib/utils";
 import { paymentSchema, type PaymentInput } from "@/lib/validations";
 import { registerPayment } from "@/app/actions";
 
@@ -45,7 +45,7 @@ function newIdempotencyKey(): string {
  */
 export function RegisterPaymentDialog({
   installment,
-  contractType,
+  lateInterestRatePercentPerDay,
   contractPrincipalAmount,
   triggerLabel = "Registrar pagamento",
   clientName,
@@ -53,7 +53,8 @@ export function RegisterPaymentDialog({
 }: {
   installment: Installment;
   /** Venda de iPhone nunca gera juros de atraso — só empréstimo. */
-  contractType: ContractType;
+  /** Juros de atraso do contrato (% ao dia), gravado no cadastro. */
+  lateInterestRatePercentPerDay: number;
   /** Valor originalmente emprestado no contrato — base do juros de atraso (nunca o valor da parcela). */
   contractPrincipalAmount: number;
   triggerLabel?: string;
@@ -68,13 +69,13 @@ export function RegisterPaymentDialog({
   const interestOwed = useMemo(
     () =>
       calculateLateInterest({
-        contractType,
+        lateInterestRatePercentPerDay,
         originalPrincipalAmount: contractPrincipalAmount,
         dueDate: installment.due_date,
         status: installment.status,
         paidInterestAmount: installment.paid_interest_amount,
       }),
-    [contractType, contractPrincipalAmount, installment.due_date, installment.status, installment.paid_interest_amount],
+    [lateInterestRatePercentPerDay, contractPrincipalAmount, installment.due_date, installment.status, installment.paid_interest_amount],
   );
   const totalDue = roundCents(outstandingPrincipal + interestOwed);
 
@@ -144,7 +145,7 @@ export function RegisterPaymentDialog({
           <p className="text-muted-foreground">Principal em aberto: {formatCurrency(outstandingPrincipal)}</p>
           {interestOwed > 0 && (
             <>
-              <p className="text-destructive">Juros de atraso (1%/dia): {formatCurrency(interestOwed)}</p>
+              <p className="text-destructive">Juros de atraso ({formatPercent(lateInterestRatePercentPerDay)}%/dia): {formatCurrency(interestOwed)}</p>
               <p className="text-xs text-muted-foreground">
                 Calculado sobre o valor originalmente emprestado: {formatCurrency(contractPrincipalAmount)}
               </p>

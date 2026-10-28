@@ -20,6 +20,7 @@ type ReminderContract = Pick<
   | "down_payment_amount"
   | "installments_count"
   | "interest_rate_percent"
+  | "late_interest_rate_percent_per_day"
 >;
 type ReminderClient = Pick<Client, "name" | "phone">;
 
@@ -86,7 +87,7 @@ function InstallmentRow({
         {installment.status !== "pago" && (
           <RegisterPaymentDialog
             installment={installment}
-            contractType={contract.type}
+            lateInterestRatePercentPerDay={contract.late_interest_rate_percent_per_day}
             contractPrincipalAmount={contract.principal_amount}
             onPaid={() => router.refresh()}
           />

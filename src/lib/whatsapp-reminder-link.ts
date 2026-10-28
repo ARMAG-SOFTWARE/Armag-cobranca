@@ -5,7 +5,10 @@ import type { Client, Contract, Installment } from "@/lib/types";
 
 export type ReminderLinkResult = { ok: true; url: string } | { ok: false; error: string };
 
-type ReminderContract = Pick<Contract, "type" | "principal_amount" | "installments_count">;
+type ReminderContract = Pick<
+  Contract,
+  "type" | "principal_amount" | "installments_count" | "late_interest_rate_percent_per_day"
+>;
 
 type ReminderInstallment = Pick<
   Installment,
@@ -44,7 +47,7 @@ export function buildWhatsAppReminderLink(
 
   const outstandingPrincipal = roundCents(Math.max(installment.amount - installment.paid_principal_amount, 0));
   const lateInterestOwed = calculateLateInterest({
-    contractType: contract.type,
+    lateInterestRatePercentPerDay: contract.late_interest_rate_percent_per_day,
     originalPrincipalAmount: contract.principal_amount,
     dueDate: installment.due_date,
     status: installment.status,
