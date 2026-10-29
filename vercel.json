@@ -1,5 +1,8 @@
 {
-  "regions": ["gru1"],
+  "framework": "nextjs",
+  "regions": [
+    "gru1"
+  ],
   "crons": [
     {
       "path": "/api/cron/check-overdue",
