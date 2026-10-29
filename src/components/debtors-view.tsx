@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SpotlightCard } from "@/components/ui/spotlight-card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RegisterPaymentDialog } from "@/components/register-payment-dialog";
+import { RenewInstallmentDialog } from "@/components/renew-installment-dialog";
 import { SettleContractDialog } from "@/components/settle-contract-dialog";
 import type { Debtor, DebtorInstallmentRow, PaidTodayRow } from "@/lib/debtors";
 import { roundCents } from "@/lib/financial-rules";
@@ -286,6 +287,15 @@ export function DebtorsView({
                                 clientName={debtor.client.name}
                                 onPaid={() => router.refresh()}
                               />
+                              {row.contract.type === "emprestimo" && row.interestOwed > 0 && (
+                                <RenewInstallmentDialog
+                                  installmentId={row.installment.id}
+                                  installmentLabel={`parcela ${row.installment.number}/${row.contract.installments_count}`}
+                                  interestOwed={row.interestOwed}
+                                  dueDate={row.installment.due_date}
+                                  periodicity={row.contract.periodicity}
+                                />
+                              )}
                             </div>
                           </div>
                         );

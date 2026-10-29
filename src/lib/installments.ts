@@ -23,6 +23,65 @@ function addPeriod(date: Date, periodicity: Periodicity, periods: number) {
   }
 }
 
+/** Um período (na periodicidade dada) depois de `dueDate` — ex.: renovação de parcela, correção de periodicidade. */
+export function nextDueDate(dueDate: string, periodicity: Periodicity): string {
+  return format(addPeriod(parseISO(dueDate), periodicity, 1), "yyyy-MM-dd");
+}
+
+export interface ScheduleInstallmentInput {
+  number: number;
+  due_date: string;
+  /**
+   * true quando a parcela já tem algum pagamento aplicado (total ou
+   * parcial) — sua `due_date` nunca é tocada por `reflowSchedule`, igual a
+   * qualquer outro dado histórico de pagamento já gravado.
+   */
+  locked: boolean;
+}
+
+/**
+ * Recalcula as datas de vencimento das parcelas AINDA EM ABERTO (não
+ * travadas) quando a periodicidade de um contrato é corrigida depois do
+ * cadastro — sem nunca mexer na data (nem em nenhum outro campo) de uma
+ * parcela que já tem pagamento aplicado, mesmo que parcial. Cada parcela
+ * aberta é reencaixada um período (na NOVA periodicidade) depois da parcela
+ * anterior — travada ou já recalculada nesta mesma passada —, continuando a
+ * sequência de onde ela realmente está, nunca do zero. A primeira parcela,
+ * se ainda estiver aberta, usa sempre `firstDueDate` (o 1º vencimento do
+ * contrato, que nunca muda por causa da periodicidade).
+ *
+ * Função PURA — só calcula as novas datas; quem decide gravar ou não no
+ * banco é sempre o chamador (`updateContractPeriodicity`, em actions.ts).
+ */
+export function reflowSchedule(
+  installments: ScheduleInstallmentInput[],
+  periodicity: Periodicity,
+  firstDueDate: string,
+): { number: number; due_date: string; changed: boolean }[] {
+  const sorted = [...installments].sort((a, b) => a.number - b.number);
+  const result: { number: number; due_date: string; changed: boolean }[] = [];
+  let previousDueDate: string | null = null;
+
+  for (const installment of sorted) {
+    if (installment.locked) {
+      result.push({ number: installment.number, due_date: installment.due_date, changed: false });
+      previousDueDate = installment.due_date;
+      continue;
+    }
+
+    const computedDueDate: string = previousDueDate === null ? firstDueDate : nextDueDate(previousDueDate, periodicity);
+
+    result.push({
+      number: installment.number,
+      due_date: computedDueDate,
+      changed: computedDueDate !== installment.due_date,
+    });
+    previousDueDate = computedDueDate;
+  }
+
+  return result;
+}
+
 /**
  * Divide o valor total em N parcelas com 2 casas decimais.
  * A última parcela absorve a diferença de arredondamento para que

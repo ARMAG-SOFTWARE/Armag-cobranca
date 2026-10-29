@@ -1,5 +1,5 @@
 import { businessDayRangeUTC, businessMonthStartUTC, businessWeekStartUTC, getBusinessToday } from "@/lib/date-utils";
-import { calculateFinancedAmount, roundCents } from "@/lib/financial-rules";
+import { roundCents, storedContractMarkup } from "@/lib/financial-rules";
 import type { ContractWithInstallments, Expense, Payment, PaymentMethod, Phone } from "@/lib/types";
 
 export interface PeriodAmounts {
@@ -169,15 +169,7 @@ export function computeDashboardMetrics(
       totalDownPayments = roundCents(totalDownPayments + contract.down_payment_amount);
     }
 
-    const { markupAmount } = calculateFinancedAmount({
-      contractType: contract.type,
-      principalAmount: contract.principal_amount,
-      installmentsCount: contract.installments_count,
-      periodicity: contract.periodicity,
-      hasDownPayment: contract.has_down_payment,
-      downPaymentAmount: contract.down_payment_amount,
-      interestRatePercent: contract.interest_rate_percent,
-    });
+    const { markupAmount } = storedContractMarkup(contract);
     markupRatioByContract.set(contract.id, contract.total_amount > 0 ? markupAmount / contract.total_amount : 0);
   }
 
@@ -229,7 +221,13 @@ export function computeDashboardMetrics(
 
     addToPeriod(lateInterestReceived, payment.interest_amount, paidAt, boundaries);
 
-    const markupRatio = payment.installment_id ? (markupRatioByContract.get(payment.contract_id) ?? 0) : 0;
+    // Pela taxa de markup do CONTRATO para parcela e para quitação total
+    // (is_settlement, que tem installment_id nulo mas pode ser de um contrato
+    // com juros). Só a ENTRADA (down payment: sem parcela e sem quitação)
+    // nunca gera lucro — ela não é financiada, então nenhuma parte dela é
+    // juros, mesmo numa venda de pods com juros de 20%.
+    const isDownPayment = !payment.installment_id && !payment.is_settlement;
+    const markupRatio = isDownPayment ? 0 : (markupRatioByContract.get(payment.contract_id) ?? 0);
     const earnedFromPrincipal = roundCents(payment.principal_amount * markupRatio);
     addToPeriod(earnings, roundCents(earnedFromPrincipal + payment.interest_amount), paidAt, boundaries);
 

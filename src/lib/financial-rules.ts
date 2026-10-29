@@ -108,6 +108,25 @@ export function calculateFinancedAmount(input: FinancedAmountInput): FinancedAmo
 }
 
 /**
+ * Juros contratual EFETIVO de um contrato já salvo, a partir dos valores
+ * gravados (total financiado − base), nunca refazendo a fórmula. Mantém
+ * painel e tela do contrato coerentes mesmo se a periodicidade for
+ * corrigida depois do cadastro (só as datas mudam; o valor combinado não).
+ */
+export function storedContractMarkup(contract: {
+  principal_amount: number;
+  total_amount: number;
+  has_down_payment: boolean;
+  down_payment_amount: number;
+}): { financedBase: number; markupAmount: number; ratePercent: number } {
+  const downPayment = contract.has_down_payment ? Math.max(contract.down_payment_amount, 0) : 0;
+  const financedBase = roundCents(Math.max(contract.principal_amount - downPayment, 0));
+  const markupAmount = roundCents(Math.max(contract.total_amount - financedBase, 0));
+  const ratePercent = financedBase > 0 ? roundCents((markupAmount / financedBase) * 100) : 0;
+  return { financedBase, markupAmount, ratePercent };
+}
+
+/**
  * Quantidade de dias corridos entre o vencimento e a data de referência
  * (0 se ainda não venceu). Compara sempre pelo calendário do fuso horário
  * do negócio (Brasil) — nunca pelo fuso do processo do servidor — para uma

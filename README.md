@@ -30,6 +30,9 @@ das diferenças em relação ao original está em [`ADAPTACOES.md`](./ADAPTACOES
 | Juros de atraso | % **ao dia** sobre o valor total do contrato, para empréstimos e pods. O padrão fica em **Configurações → Regras de cobrança** (inicial: 1%) e é **copiado para cada contrato no cadastro**: mudar a configuração não altera contratos existentes. |
 | Cobrança pelo WhatsApp | Manual: o botão abre a conversa com a mensagem pronta. Em **Configurações → Regras de cobrança** escolha como abrir: padrão (`wa.me`), **WhatsApp Business no Android** (abre sempre o app Business, nunca o pessoal) ou **WhatsApp Web** (para iPhone/iPad, com o navegador logado na conta Business). No iPhone/iPad não é possível escolher o app pelo link. |
 | Campos do produto | Cor, bateria e IMEI continuam disponíveis e opcionais. |
+| Abatimento parcial | Um valor recebido de uma vez é aplicado nas parcelas em aberto, da mais antiga para a mais nova, sem perdoar nada (diferente da quitação total, que encerra a dívida). |
+| Renovação de parcela | Paga só o juros de atraso pendente e empurra o vencimento 1 período (inclusive 1 dia, na diária); o principal continua em aberto. |
+| Editar periodicidade | Reencaixa só as datas das parcelas em aberto (parcelas com pagamento nunca mudam). O valor combinado do contrato não muda; em pods, a nova agenda ainda precisa caber em 4 semanas. |
 
 Todas as fórmulas ficam em `src/lib/financial-rules.ts` e são cobertas por
 `src/lib/financial-rules.test.ts`.
@@ -41,7 +44,7 @@ Todas as fórmulas ficam em `src/lib/financial-rules.ts` e são cobertas por
 1. Em [supabase.com](https://supabase.com), crie um projeto (região **South America (São Paulo)**,
    senha do banco forte, guardada num gerenciador de senhas).
 2. **SQL Editor**: rode os arquivos de `supabase/migrations/` **em ordem numérica**
-   (`0001` … `0022`). Funcionam num banco vazio, sem usuário criado. Alternativa pela CLI:
+   (`0001` … `0024`). Funcionam num banco vazio, sem usuário criado. Alternativa pela CLI:
    `supabase link --project-ref <ref>` e `supabase db push`.
 3. **Authentication → Sign In / Providers**: mantenha "Email" ligado e **desligue "Allow new users
    to sign up"** (não existe cadastro público no app).

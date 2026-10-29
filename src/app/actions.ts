@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit-log";
 import { getBusinessToday } from "@/lib/date-utils";
 import { detectSafeDocumentType } from "@/lib/file-validation";
-import { generateInstallments } from "@/lib/installments";
+import { generateInstallments, nextDueDate, reflowSchedule } from "@/lib/installments";
 import { normalizeImei } from "@/lib/imei";
 import { sendCollectionReminder } from "@/lib/whatsapp";
 import {
@@ -15,6 +15,7 @@ import {
   calculateFinancedAmount,
   calculateLateInterest,
   DEFAULT_LATE_INTEREST_RATE_PERCENT_PER_DAY,
+  PRODUCT_SALE_MAX_WEEKS,
   daysLate,
   roundCents,
   splitPayment,
@@ -31,6 +32,8 @@ import {
   clientInfoSchema,
   contractDisbursementSchema,
   settleContractSchema,
+  contractPeriodicitySchema,
+  renewInstallmentSchema,
   type TransactionInput,
   type MessageSettingsInput,
   type PaymentInput,
@@ -41,8 +44,10 @@ import {
   type ContractDisbursementInput,
   type SettleContractInput,
   type BusinessSettingsInput,
+  type ContractPeriodicityInput,
+  type RenewInstallmentInput,
 } from "@/lib/validations";
-import type { ContractStatus, ContractType, InstallmentStatus, WeeklyChargeStatus } from "@/lib/types";
+import type { ContractStatus, ContractType, InstallmentStatus, Periodicity, WeeklyChargeStatus } from "@/lib/types";
 import { formatCurrency, onlyDigits } from "@/lib/utils";
 
 /**
@@ -684,6 +689,158 @@ export async function registerPayment(input: PaymentInput): Promise<ActionResult
   return { ok: true, contractId: installment.contract_id };
 }
 
+/**
+ * Renovação de parcela: paga só o juros de atraso pendente agora e empurra
+ * o vencimento 1 período (semanal/quinzenal/mensal, conforme o contrato)
+ * para frente — o principal da parcela NUNCA é reduzido aqui, continua
+ * integralmente em aberto até um pagamento normal de verdade (registerPayment).
+ * Uso típico: empréstimo onde o cliente só paga o juros todo mês e "rola"
+ * a dívida, até decidir quitar o principal.
+ *
+ * Só faz sentido para empréstimo (venda de produto nunca tem juros de
+ * atraso) e só quando há juros de fato pendente agora — sem isso, não há o
+ * que renovar. O juros é sempre recalculado ao vivo no servidor
+ * (`calculateLateInterest`), nunca um valor vindo da tela.
+ */
+export async function renewInstallment(installmentId: string, input: RenewInstallmentInput): Promise<ActionResult> {
+  const parsed = renewInstallmentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const data = parsed.data;
+  const supabase = await createClient();
+
+  type RenewInstallmentRow = {
+    id: string;
+    contract_id: string;
+    due_date: string;
+    status: InstallmentStatus;
+    paid_principal_amount: number;
+    paid_interest_amount: number;
+    contract: {
+      client_id: string;
+      type: ContractType;
+      status: ContractStatus;
+      principal_amount: number;
+      late_interest_rate_percent_per_day: number;
+      periodicity: Periodicity;
+    } | null;
+  };
+
+  const [{ data: existingPayment }, { data: installmentData, error: installmentError }] = await Promise.all([
+    data.idempotencyKey
+      ? supabase.from("payments").select("contract_id").eq("idempotency_key", data.idempotencyKey).maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("installments")
+      .select(
+        "id, contract_id, due_date, status, paid_principal_amount, paid_interest_amount, contract:contracts(client_id, type, status, principal_amount, late_interest_rate_percent_per_day, periodicity)",
+      )
+      .eq("id", installmentId)
+      .single(),
+  ]);
+
+  if (existingPayment) {
+    return { ok: true, contractId: existingPayment.contract_id };
+  }
+
+  if (installmentError || !installmentData) {
+    return { ok: false, error: safeError(installmentError, "Parcela não encontrada.") };
+  }
+  const installment = installmentData as unknown as RenewInstallmentRow;
+  const contract = installment.contract;
+  if (!contract) {
+    return { ok: false, error: "Contrato não encontrado." };
+  }
+  if (contract.status === "cancelado") {
+    return { ok: false, error: "Este empréstimo foi cancelado. Não é possível renovar parcela." };
+  }
+  if (installment.status === "pago") {
+    return { ok: false, error: "Esta parcela já está totalmente paga." };
+  }
+
+  const interestOwed = calculateLateInterest({
+    lateInterestRatePercentPerDay: contract.late_interest_rate_percent_per_day,
+    originalPrincipalAmount: contract.principal_amount,
+    dueDate: installment.due_date,
+    status: installment.status,
+    paidInterestAmount: installment.paid_interest_amount,
+  });
+  if (interestOwed <= 0) {
+    return { ok: false, error: "Esta parcela não tem juros de atraso pendente para renovar." };
+  }
+
+  const newDueDate = nextDueDate(installment.due_date, contract.periodicity);
+  const newStatus: InstallmentStatus = daysLate(newDueDate) > 0 ? "atrasado" : "pendente";
+
+  const ownerId = await getCurrentUserId(supabase);
+  if (!ownerId) {
+    return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  }
+  const createdByEmail = await getCurrentUserEmail(supabase);
+
+  type RenewRpcResult = { payment_id: string; already_existed: boolean };
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc("renew_installment_atomic", {
+      p_installment_id: installment.id,
+      p_owner_id: ownerId,
+      p_contract_id: installment.contract_id,
+      p_client_id: contract.client_id,
+      p_interest_amount: interestOwed,
+      p_new_due_date: newDueDate,
+      p_new_status: newStatus,
+      p_expected_paid_principal: installment.paid_principal_amount,
+      p_expected_paid_interest: installment.paid_interest_amount,
+      p_expected_status: installment.status,
+      p_expected_due_date: installment.due_date,
+      p_method: "outro",
+      p_notes: data.notes || null,
+      p_created_by_email: createdByEmail,
+      p_idempotency_key: data.idempotencyKey ?? null,
+    })
+    .single();
+
+  if (rpcError) {
+    if (rpcError.message?.includes("installment_changed_concurrently")) {
+      return {
+        ok: false,
+        error: "Esta parcela foi alterada enquanto a tela estava aberta. Atualize e tente de novo.",
+      };
+    }
+    if (rpcError.code === "23505" && data.idempotencyKey) {
+      return { ok: true, contractId: installment.contract_id };
+    }
+    return { ok: false, error: safeError(rpcError, "Erro ao renovar a parcela.") };
+  }
+
+  const rpcResult = rpcData as unknown as RenewRpcResult | null;
+  if (rpcResult?.already_existed) {
+    return { ok: true, contractId: installment.contract_id };
+  }
+
+  await recalculateContractStatus(supabase, installment.contract_id);
+
+  revalidatePath(`/contracts/${installment.contract_id}`);
+  revalidatePath("/");
+  revalidatePath("/clientes");
+  revalidatePath("/debtors");
+
+  await logAudit(supabase, {
+    actorEmail: createdByEmail,
+    ownerId,
+    action: "installment_renewed",
+    resourceType: "installment",
+    resourceId: installment.id,
+    metadata: {
+      interestAmount: interestOwed,
+      previousDueDate: installment.due_date,
+      newDueDate,
+    },
+  });
+
+  return { ok: true, contractId: installment.contract_id };
+}
+
 export interface ContractSettlementSummary {
   clientName: string;
   contractLabel: string;
@@ -942,6 +1099,167 @@ export async function settleContract(contractId: string, input: SettleContractIn
   return { ok: true, contractId: contract.id };
 }
 
+/**
+ * Abatimento parcial: aplica o valor recebido sobre as parcelas ainda em
+ * aberto do contrato (mesma distribuição de `allocateSettlement` — mais
+ * antiga primeiro, principal antes do juros), SEM perdoar nada. O que não
+ * for coberto continua em aberto normalmente (mesmo status que teria se
+ * cada parcela tivesse recebido um pagamento parcial individual via
+ * `registerPayment` — a dívida só fecha sozinha se o valor cobrir tudo,
+ * nunca é forçada a fechar aqui).
+ *
+ * Diferente de `settleContract`: cada parcela tocada gera o seu PRÓPRIO
+ * registro em `payments` (não um único pagamento consolidado) — do jeito
+ * que qualquer pagamento de parcela já aparece no histórico, só que várias
+ * de uma vez, numa única transação atômica (`apply_contract_abatement_atomic`,
+ * migration 0021).
+ */
+export async function payDownContractBalance(contractId: string, input: SettleContractInput): Promise<ActionResult> {
+  const parsed = settleContractSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const data = parsed.data;
+  const supabase = await createClient();
+
+  const [{ data: existingPayment }, { data: contractData, error: contractError }] = await Promise.all([
+    data.idempotencyKey
+      ? supabase.from("payments").select("contract_id").eq("idempotency_key", data.idempotencyKey).maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("contracts")
+      .select(
+        "id, owner_id, client_id, type, status, principal_amount, late_interest_rate_percent_per_day, client:clients(name), installments(id, number, amount, due_date, status, paid_principal_amount, paid_interest_amount)",
+      )
+      .eq("id", contractId)
+      .single(),
+  ]);
+
+  if (existingPayment) {
+    return { ok: true, contractId: existingPayment.contract_id };
+  }
+
+  if (contractError || !contractData) {
+    return { ok: false, error: safeError(contractError, "Empréstimo/venda não encontrado.") };
+  }
+  const contract = contractData as unknown as SettlementContractRow;
+
+  if (contract.status === "cancelado") {
+    return { ok: false, error: "Este empréstimo/venda foi cancelado. Não é possível registrar pagamento nele." };
+  }
+  if (contract.status === "quitado") {
+    return { ok: false, error: "Esta dívida já está quitada." };
+  }
+
+  const { remaining, settlementInput } = buildSettlementInstallmentInputs(contract);
+  if (remaining.length === 0) {
+    return { ok: false, error: "Esta dívida não possui parcelas em aberto." };
+  }
+
+  const amountReceived = roundCents(data.amountReceived);
+  const allocation = allocateSettlement(settlementInput, amountReceived);
+
+  if (amountReceived > allocation.previousBalance) {
+    return {
+      ok: false,
+      error: `O valor recebido não pode ser maior que o saldo devedor atual (${formatCurrency(allocation.previousBalance)}).`,
+    };
+  }
+  if (allocation.totalApplied <= 0) {
+    return { ok: false, error: "Informe um valor recebido maior que zero." };
+  }
+
+  const ownerId = await getCurrentUserId(supabase);
+  if (!ownerId) {
+    return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  }
+  const createdByEmail = await getCurrentUserEmail(supabase);
+
+  // Mesma fórmula de status usada em `registerPayment` pra uma parcela só —
+  // aqui aplicada a cada parcela tocada pelo abatimento: totalmente coberta
+  // vira "pago"; senão, "atrasado" se já venceu, "parcial" caso contrário.
+  // Nunca força "pago" numa parcela que não foi totalmente coberta (essa é
+  // exatamente a diferença para a quitação total).
+  const installmentsPayload = remaining.map((installment) => {
+    const applied = allocation.allocations.find((a) => a.id === installment.id)!;
+    const newPaidPrincipal = roundCents(installment.paid_principal_amount + applied.principalApplied);
+    const newPaidInterest = roundCents(installment.paid_interest_amount + applied.interestApplied);
+    const isFullyPaid = newPaidPrincipal >= roundCents(installment.amount);
+    const isStillLate = daysLate(installment.due_date) > 0;
+    const newStatus: InstallmentStatus = isFullyPaid ? "pago" : isStillLate ? "atrasado" : "parcial";
+
+    return {
+      id: installment.id,
+      expected_paid_principal: installment.paid_principal_amount,
+      expected_paid_interest: installment.paid_interest_amount,
+      expected_status: installment.status,
+      principal_applied: applied.principalApplied,
+      interest_applied: applied.interestApplied,
+      new_paid_principal: newPaidPrincipal,
+      new_paid_interest: newPaidInterest,
+      new_status: newStatus,
+    };
+  });
+
+  type AbatementRpcResult = { already_existed: boolean };
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc("apply_contract_abatement_atomic", {
+      p_contract_id: contract.id,
+      p_owner_id: ownerId,
+      p_client_id: contract.client_id,
+      p_installments: installmentsPayload,
+      p_method: "outro",
+      p_notes: data.notes || null,
+      p_created_by_email: createdByEmail,
+      p_idempotency_key: data.idempotencyKey ?? null,
+    })
+    .single();
+
+  if (rpcError) {
+    if (rpcError.message?.includes("installment_changed_concurrently")) {
+      return {
+        ok: false,
+        error: "Os dados desta dívida mudaram enquanto a tela estava aberta. Atualize e tente de novo.",
+      };
+    }
+    if (rpcError.code === "23505" && data.idempotencyKey) {
+      return { ok: true, contractId: contract.id };
+    }
+    return { ok: false, error: safeError(rpcError, "Erro ao registrar o abatimento.") };
+  }
+
+  const rpcResult = rpcData as unknown as AbatementRpcResult | null;
+  if (rpcResult?.already_existed) {
+    return { ok: true, contractId: contract.id };
+  }
+
+  await recalculateContractStatus(supabase, contract.id);
+
+  revalidatePath(`/contracts/${contract.id}`);
+  revalidatePath("/");
+  revalidatePath("/clientes");
+  revalidatePath("/debtors");
+  if (contract.type === "venda_iphone") {
+    revalidatePath("/phones");
+  }
+
+  await logAudit(supabase, {
+    actorEmail: createdByEmail,
+    ownerId,
+    action: "contract_balance_reduced",
+    resourceType: "contract",
+    resourceId: contract.id,
+    metadata: {
+      amountReceived,
+      previousBalance: allocation.previousBalance,
+      principalAmount: allocation.totalPrincipalApplied,
+      interestAmount: allocation.totalInterestApplied,
+    },
+  });
+
+  return { ok: true, contractId: contract.id };
+}
+
 export async function registerExpense(input: ExpenseInput): Promise<ActionResult> {
   const parsed = expenseSchema.safeParse(input);
   if (!parsed.success) {
@@ -1173,6 +1491,146 @@ export async function updateContractDisbursement(
     resourceType: "contract",
     resourceId: contractId,
     metadata: { disbursedAt },
+  });
+  return { ok: true, contractId };
+}
+
+/**
+ * Corrige a periodicidade de um contrato (empréstimo OU venda) cadastrada
+ * errada — ex.: o cliente combinou semanal, mas foi cadastrado como mensal.
+ * Permitido mesmo com parcela já paga: NUNCA mexe na data (nem em nenhum
+ * outro campo) de uma parcela que já tem algum pagamento aplicado, total ou
+ * parcial — só reencaixa as parcelas ainda em aberto a partir da nova
+ * periodicidade, continuando de onde a última parcela travada realmente
+ * está (`reflowSchedule`, installments.ts). O valor de cada parcela nunca
+ * muda (não depende de periodicidade); só a data de vencimento das
+ * parcelas em aberto é ajustada.
+ *
+ * `weekly_charges` é sincronizado: sai da fila semanal se deixou de ser
+ * "semanal", entra se passou a ser (mesma regra usada na criação do
+ * contrato, em `createTransaction`).
+ */
+export async function updateContractPeriodicity(
+  contractId: string,
+  input: ContractPeriodicityInput,
+): Promise<ActionResult> {
+  const parsed = contractPeriodicitySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const data = parsed.data;
+  const supabase = await createClient();
+
+  const { data: contractData, error: contractError } = await supabase
+    .from("contracts")
+    .select(
+      "id, owner_id, client_id, type, status, periodicity, first_due_date, installments(id, number, due_date, paid_principal_amount, paid_interest_amount)",
+    )
+    .eq("id", contractId)
+    .single();
+
+  if (contractError || !contractData) {
+    return { ok: false, error: safeError(contractError, "Empréstimo/venda não encontrado.") };
+  }
+  type PeriodicityContractRow = {
+    id: string;
+    owner_id: string;
+    client_id: string;
+    type: ContractType;
+    status: ContractStatus;
+    periodicity: Periodicity;
+    first_due_date: string;
+    installments: { id: string; number: number; due_date: string; paid_principal_amount: number; paid_interest_amount: number }[];
+  };
+  const contract = contractData as unknown as PeriodicityContractRow;
+
+  if (contract.status === "cancelado") {
+    return { ok: false, error: "Este empréstimo/venda foi cancelado. Não é possível alterar." };
+  }
+  if (contract.status === "quitado") {
+    return { ok: false, error: "Esta dívida já está quitada — não há parcela em aberto para reorganizar." };
+  }
+  if (contract.periodicity === data.periodicity) {
+    return { ok: true, contractId };
+  }
+
+  const scheduleInput = contract.installments.map((installment) => ({
+    number: installment.number,
+    due_date: installment.due_date,
+    locked: installment.paid_principal_amount > 0 || installment.paid_interest_amount > 0,
+  }));
+  const reflowed = reflowSchedule(scheduleInput, data.periodicity, contract.first_due_date);
+  const dueDateByNumber = new Map(reflowed.filter((r) => r.changed).map((r) => [r.number, r.due_date]));
+
+  // Venda de produto (pods): o parcelamento continua tendo de caber em até
+  // 4 semanas a partir do 1º vencimento — mesma regra do cadastro.
+  if (contract.type === "venda_iphone" && reflowed.length > 0) {
+    const lastDueDate = reflowed.reduce((latest, r) => (r.due_date > latest ? r.due_date : latest), reflowed[0].due_date);
+    const spanDays = Math.round(
+      (parseISO(lastDueDate).getTime() - parseISO(contract.first_due_date).getTime()) / 86_400_000,
+    );
+    if (spanDays >= PRODUCT_SALE_MAX_WEEKS * 7) {
+      return {
+        ok: false,
+        error: `Com essa periodicidade a venda passaria de ${PRODUCT_SALE_MAX_WEEKS} semanas a partir do 1º vencimento.`,
+      };
+    }
+  }
+
+  if (dueDateByNumber.size > 0) {
+    const updates = contract.installments
+      .filter((installment) => dueDateByNumber.has(installment.number))
+      .map((installment) =>
+        supabase
+          .from("installments")
+          .update({ due_date: dueDateByNumber.get(installment.number) })
+          .eq("id", installment.id),
+      );
+    const results = await Promise.all(updates);
+    const failed = results.find((r) => r.error);
+    if (failed?.error) {
+      return { ok: false, error: safeError(failed.error, "Erro ao recalcular datas das parcelas.") };
+    }
+  }
+
+  const { error: contractUpdateError } = await supabase
+    .from("contracts")
+    .update({ periodicity: data.periodicity })
+    .eq("id", contractId);
+  if (contractUpdateError) {
+    return { ok: false, error: safeError(contractUpdateError, "Erro ao atualizar periodicidade.") };
+  }
+
+  const wasWeekly = contract.periodicity === "semanal";
+  const isWeekly = data.periodicity === "semanal";
+  if (wasWeekly && !isWeekly) {
+    await supabase.from("weekly_charges").delete().eq("contract_id", contractId);
+  } else if (!wasWeekly && isWeekly) {
+    await supabase.from("weekly_charges").insert({
+      owner_id: contract.owner_id,
+      contract_id: contractId,
+      client_id: contract.client_id,
+      dia_semana_disparo: toBusinessWeekday(contract.first_due_date),
+      proximo_disparo: contract.first_due_date,
+      status: "PENDENTE",
+    });
+  }
+
+  revalidatePath(`/contracts/${contractId}`);
+  revalidatePath("/");
+  revalidatePath("/clientes");
+  revalidatePath("/debtors");
+  await logAudit(supabase, {
+    actorEmail: await getCurrentUserEmail(supabase),
+    ownerId: contract.owner_id,
+    action: "contract_periodicity_updated",
+    resourceType: "contract",
+    resourceId: contractId,
+    metadata: {
+      before: contract.periodicity,
+      after: data.periodicity,
+      installmentsRescheduled: dueDateByNumber.size,
+    },
   });
   return { ok: true, contractId };
 }

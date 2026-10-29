@@ -32,6 +32,25 @@ Para conferir qualquer diferença: `git diff <primeiro-commit> -- <arquivo>`.
 Banco: migration `0022_armag_business_rules.sql` (periodicidade diária, juros de atraso por
 contrato, tabela `business_settings` com RLS).
 
+## Recursos trazidos do Recebe depois da cópia inicial
+
+Portados do Recebe/Cobrança (commits `f32c7b5`, `ff7e2db`, `33dbf92` e `d98ee76` do
+repositório original), adaptados às regras deste sistema:
+
+| Recurso | Adaptação no ARMAG |
+|---|---|
+| Abatimento parcial de dívida | Usa a taxa de atraso gravada no contrato |
+| Editar periodicidade do contrato | Inclui "diária"; em pods, recusa se a nova agenda passar de 4 semanas |
+| Renovação de parcela (paga só o juros) | Usa a taxa de atraso do contrato; vale também para pods, que aqui têm juros de atraso |
+| Lucro da quitação total no painel | A entrada (down payment) continua sem gerar lucro, mesmo em pods com juros |
+
+Migrations renumeradas para `0023_contract_abatement.sql` e `0024_installment_renewal.sql`
+(aqui `0021` e `0022` já existiam).
+
+Como a periodicidade pode ser corrigida depois do cadastro, o juros exibido no painel e no
+contrato passou a ser calculado a partir do valor salvo (total financiado − base), e não
+refazendo a fórmula semanal (`storedContractMarkup` em `src/lib/financial-rules.ts`).
+
 ## Interface
 
 - Mesmas telas e navegação. Acréscimos pontuais: cartão "Regras de cobrança" em Configurações;

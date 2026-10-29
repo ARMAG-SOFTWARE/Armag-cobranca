@@ -7,6 +7,7 @@ import { CopyButton } from "@/components/copy-button";
 import { DeleteContractDialog } from "@/components/delete-contract-dialog";
 import { DisbursementDialog } from "@/components/disbursement-dialog";
 import { EditClientInfoDialog } from "@/components/edit-client-info-dialog";
+import { EditPeriodicityDialog } from "@/components/edit-periodicity-dialog";
 import { InstallmentsGrid } from "@/components/installments-grid";
 import { PaymentHistory } from "@/components/payment-history";
 import { SettleContractDialog } from "@/components/settle-contract-dialog";
@@ -17,7 +18,7 @@ import { getClientDocumentSignedUrl } from "@/lib/client-documents";
 import { getBusinessSettings } from "@/lib/business-settings";
 import { createClient } from "@/lib/supabase/server";
 import { buildWhatsAppChatUrl } from "@/lib/whatsapp-open";
-import { calculateFinancedAmount, roundCents } from "@/lib/financial-rules";
+import { roundCents, storedContractMarkup } from "@/lib/financial-rules";
 import { PERIODICITY_LABELS, type ContractWithInstallments, type Payment, type Phone } from "@/lib/types";
 import { formatCurrency, formatDate, formatPhone, initials, toWhatsAppDigits } from "@/lib/utils";
 
@@ -48,15 +49,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
     ? buildWhatsAppChatUrl(whatsappDigits, undefined, businessSettings.whatsappOpenMode)
     : null;
 
-  const { markupAmount, ratePercent } = calculateFinancedAmount({
-    contractType: contract.type,
-    principalAmount: contract.principal_amount,
-    installmentsCount: contract.installments_count,
-    periodicity: contract.periodicity,
-    hasDownPayment: contract.has_down_payment,
-    downPaymentAmount: contract.down_payment_amount,
-    interestRatePercent: contract.interest_rate_percent,
-  });
+  const { markupAmount, ratePercent } = storedContractMarkup(contract);
 
   // Valor da parcela lido da parcela real já persistida (não recalculado do
   // zero), garantindo que a tela mostre exatamente o que foi cobrado — a
@@ -113,6 +106,13 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
           <div className="flex items-center gap-2">
             <ContractStatusBadge status={contract.status} />
             <EditClientInfoDialog client={contract.client} />
+            {contract.status !== "cancelado" && contract.status !== "quitado" && (
+              <EditPeriodicityDialog
+                contractId={contract.id}
+                currentPeriodicity={contract.periodicity}
+                hasLockedInstallments={payments.length > 0}
+              />
+            )}
             {contract.status !== "quitado" && contract.status !== "cancelado" && (
               <SettleContractDialog contractId={contract.id} />
             )}

@@ -19,22 +19,37 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/utils";
 import { settleContractSchema, type SettleContractInput } from "@/lib/validations";
-import { getContractSettlementSummary, settleContract, type ContractSettlementSummary } from "@/app/actions";
+import {
+  getContractSettlementSummary,
+  payDownContractBalance,
+  settleContract,
+  type ContractSettlementSummary,
+} from "@/app/actions";
 
 function newIdempotencyKey(): string {
   return crypto.randomUUID();
 }
 
 /**
- * Quitação total de UMA dívida (contrato) por um valor possivelmente
- * diferente do saldo devedor atual — fecha todas as parcelas restantes de
- * uma vez, registrando no histórico exatamente o valor recebido (nunca o
- * saldo anterior). A prévia (saldo devedor, total já pago) é sempre
- * recarregada do servidor quando o diálogo abre, nunca um número já
- * calculado em outra tela que possa estar desatualizado.
+ * Lida com as duas pontas de "mexer no saldo de uma dívida" (contrato) de
+ * uma vez — o valor recebido é sempre distribuído pelas parcelas ainda em
+ * aberto (mais antiga primeiro, principal antes do juros), mas o que
+ * acontece com o que sobra sem cobertura depende do interruptor
+ * "Perdoar o restante":
+ *
+ * - Desligado (padrão): ABATIMENTO — reduz o saldo pelo valor recebido;
+ *   o que não for coberto continua em aberto, cobrável normalmente (a
+ *   dívida só fecha sozinha se o valor cobrir tudo).
+ * - Ligado: QUITAÇÃO TOTAL — encerra a dívida mesmo que o valor recebido
+ *   seja menor que o saldo, perdoando a diferença (acordo).
+ *
+ * A prévia (saldo devedor, total já pago) é sempre recarregada do servidor
+ * quando o diálogo abre, nunca um número já calculado em outra tela que
+ * possa estar desatualizado.
  */
 export function SettleContractDialog({
   contractId,
@@ -48,6 +63,7 @@ export function SettleContractDialog({
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<ContractSettlementSummary | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
+  const [forgiveRemainder, setForgiveRemainder] = useState(false);
 
   const {
     register,
@@ -64,6 +80,7 @@ export function SettleContractDialog({
     if (!next) return;
 
     setIdempotencyKey(newIdempotencyKey());
+    setForgiveRemainder(false);
     setLoading(true);
     setSummary(null);
     getContractSettlementSummary(contractId).then((result) => {
@@ -79,13 +96,20 @@ export function SettleContractDialog({
   }
 
   const onSubmit = handleSubmit(async (data) => {
-    const result = await settleContract(contractId, { ...data, idempotencyKey });
+    // Só faz sentido perdoar algo se de fato sobrar saldo sem cobertura —
+    // com valor igual/maior ao saldo devedor, as duas ações dão no mesmo
+    // resultado (fecha tudo, nada perdoado), então usa sempre o abatimento
+    // (caminho mais simples: um pagamento por parcela, igual a um pagamento
+    // normal, em vez de um evento de quitação).
+    const willForgive = forgiveRemainder && summary !== null && data.amountReceived < summary.outstandingBalance;
+    const action = willForgive ? settleContract : payDownContractBalance;
+    const result = await action(contractId, { ...data, idempotencyKey });
     if (result.ok) {
-      toast.success("Dívida quitada com sucesso.");
+      toast.success(willForgive ? "Dívida quitada com sucesso." : "Pagamento registrado e saldo atualizado.");
       setOpen(false);
       router.refresh();
     } else {
-      toast.error(result.error ?? "Erro ao quitar a dívida.");
+      toast.error(result.error ?? "Erro ao processar a operação.");
     }
   });
 
@@ -99,10 +123,11 @@ export function SettleContractDialog({
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Quitação total da dívida</DialogTitle>
+          <DialogTitle>{forgiveRemainder ? "Quitação total da dívida" : "Abater valor da dívida"}</DialogTitle>
           <DialogDescription>
-            Encerra a dívida registrando o valor realmente recebido — pode ser diferente do saldo devedor, em caso de
-            acordo.
+            {forgiveRemainder
+              ? "Encerra a dívida registrando o valor realmente recebido — a diferença para o saldo devedor é perdoada (acordo)."
+              : "Reduz o saldo devedor pelo valor recebido. Se não cobrir tudo, o restante continua em aberto normalmente."}
           </DialogDescription>
         </DialogHeader>
 
@@ -135,10 +160,24 @@ export function SettleContractDialog({
                 {errors.amountReceived && <p className="text-xs text-destructive">{errors.amountReceived.message}</p>}
                 <p className="text-xs text-muted-foreground">
                   Não pode ultrapassar o saldo devedor atual ({formatCurrency(summary.outstandingBalance)}).
+                  {!forgiveRemainder &&
+                    " Um valor menor que o saldo abate só essa parte — o restante continua em aberto."}
                 </p>
               </div>
+
+              <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div>
+                  <Label htmlFor="forgiveRemainder">Perdoar o restante e encerrar a dívida</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Só importa se o valor for menor que o saldo devedor. Desligado (padrão): só abate o saldo, sem
+                    perdoar nada.
+                  </p>
+                </div>
+                <Switch id="forgiveRemainder" checked={forgiveRemainder} onCheckedChange={setForgiveRemainder} />
+              </div>
+
               <div className="grid gap-1.5">
-                <Label htmlFor="notes">Observação / justificativa do acordo (opcional)</Label>
+                <Label htmlFor="notes">Observação {forgiveRemainder ? "/ justificativa do acordo " : ""}(opcional)</Label>
                 <Textarea id="notes" rows={2} placeholder="Ex: acordo por pagamento à vista" {...register("notes")} />
               </div>
 
@@ -148,7 +187,7 @@ export function SettleContractDialog({
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting && <Loader2Icon className="animate-spin" />}
-                  {isSubmitting ? "Quitando..." : "Confirmar quitação"}
+                  {isSubmitting ? "Salvando..." : forgiveRemainder ? "Confirmar quitação" : "Confirmar abatimento"}
                 </Button>
               </DialogFooter>
             </form>
