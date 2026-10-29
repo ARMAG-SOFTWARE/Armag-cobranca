@@ -6,11 +6,26 @@ import { GradientHeading } from "@/components/ui/gradient-heading";
 import { ShinyText } from "@/components/ui/shiny-text";
 import { StatTile } from "@/components/ui/stat-tile";
 import { businessMonthStartUTC } from "@/lib/date-utils";
-import { computeDashboardMetrics } from "@/lib/dashboard-metrics";
+import {
+  computeDashboardMetrics,
+  type DashboardContractInput,
+  type DashboardExpenseInput,
+  type DashboardPaymentInput,
+} from "@/lib/dashboard-metrics";
 import { getTodayDebtors } from "@/lib/debtors";
 import { createClient } from "@/lib/supabase/server";
-import type { ContractWithInstallments, Expense, Payment, Phone } from "@/lib/types";
+import type { Phone } from "@/lib/types";
 import { BRAND } from "@/lib/brand";
+
+/**
+ * A tela só precisa de `client_id` dos contratos (pra contar clientes
+ * ativos), nunca do cadastro completo do cliente — o join `client:clients(*)`
+ * usado por outras telas não é necessário aqui.
+ */
+type DashboardPageContract = DashboardContractInput & {
+  client_id: string;
+  installments: (DashboardContractInput["installments"][number] & { paid_at: string | null })[];
+};
 
 export const dynamic = "force-dynamic";
 
@@ -28,16 +43,25 @@ export default async function DashboardPage() {
     { data: phonesData },
     { summary: debtorsSummary, debtors },
   ] = await Promise.all([
-    supabase.from("contracts").select("*, client:clients(*), installments(*)").order("created_at", { ascending: false }),
-    supabase.from("payments").select("*"),
-    supabase.from("expenses").select("*"),
+    // Só as colunas que esta tela usa — nada de `*` nem do cadastro completo
+    // do cliente: menos dados trafegando a cada abertura da Visão Geral.
+    supabase
+      .from("contracts")
+      .select(
+        "id, client_id, status, type, principal_amount, total_amount, has_down_payment, down_payment_amount, disbursed_at, installments(amount, paid_principal_amount, status, paid_at)",
+      )
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("payments")
+      .select("paid_at, principal_amount, interest_amount, method, contract_id, installment_id, is_settlement"),
+    supabase.from("expenses").select("amount, expense_date, method"),
     supabase.from("phones").select("id, contract_id, cost_amount"),
     getTodayDebtors(supabase),
   ]);
 
-  const contracts = (data ?? []) as ContractWithInstallments[];
-  const payments = (paymentsData ?? []) as Payment[];
-  const expenses = (expensesData ?? []) as Expense[];
+  const contracts = (data ?? []) as DashboardPageContract[];
+  const payments = (paymentsData ?? []) as DashboardPaymentInput[];
+  const expenses = (expensesData ?? []) as DashboardExpenseInput[];
   const phones = (phonesData ?? []) as Pick<Phone, "id" | "contract_id" | "cost_amount">[];
   const metrics = computeDashboardMetrics(contracts, payments, expenses, phones);
 
