@@ -49,11 +49,14 @@ export default async function BackupsPage() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("backup_runs")
-    .select("*")
+    .select("id, started_at, status, tiers, size_bytes, duration_seconds, validation, restore_tested")
     .order("started_at", { ascending: false })
     .limit(100);
 
-  const runs = (data ?? []) as BackupRun[];
+  const runs = (data ?? []) as Pick<
+    BackupRun,
+    "id" | "started_at" | "status" | "tiers" | "size_bytes" | "duration_seconds" | "validation" | "restore_tested"
+  >[];
   const lastSuccess = runs.find((r) => r.status === "success");
   const lastFailure = runs.find((r) => r.status === "failed");
 

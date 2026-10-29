@@ -3,6 +3,9 @@ import { calculateLateInterest, daysLate, roundCents } from "@/lib/financial-rul
 import type { createClient } from "@/lib/supabase/server";
 import type { Client, Contract, Installment } from "@/lib/types";
 
+/** Só o que Devedores do Dia (e o painel) usam do cliente. */
+export type DebtorClient = Pick<Client, "id" | "name" | "phone">;
+
 export interface DebtorInstallmentRow {
   installment: Installment;
   contract: Pick<
@@ -24,7 +27,7 @@ export interface DebtorInstallmentRow {
 }
 
 export interface Debtor {
-  client: Client;
+  client: DebtorClient;
   rows: DebtorInstallmentRow[];
   totalDue: number;
   hasOverdue: boolean;
@@ -118,7 +121,7 @@ export async function getTodayDebtors(
     supabase
       .from("installments")
       .select(
-        "*, contract:contracts(id, type, status, description, installments_count, principal_amount, late_interest_rate_percent_per_day, periodicity, client:clients(*))",
+        "*, contract:contracts(id, type, status, description, installments_count, principal_amount, late_interest_rate_percent_per_day, periodicity, client:clients(id, name, phone))",
       )
       .in("status", ["pendente", "atrasado", "parcial"])
       .lte("due_date", todayStr),
@@ -145,7 +148,7 @@ export async function getTodayDebtors(
       | "late_interest_rate_percent_per_day"
       | "periodicity"
     > & {
-      client: Client;
+      client: DebtorClient;
     };
   };
   const allInstallments = (installmentsData ?? []) as InstallmentRow[];

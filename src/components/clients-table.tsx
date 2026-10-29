@@ -9,7 +9,13 @@ import { SpotlightCard } from "@/components/ui/spotlight-card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ContractStatusBadge, ContractTypeBadge } from "@/components/status-badge";
-import { PERIODICITY_LABELS, type ContractWithClient } from "@/lib/types";
+import { PERIODICITY_LABELS, type Client, type Contract } from "@/lib/types";
+
+/** Só o que a tabela exibe/filtra — a página busca exatamente estas colunas. */
+export type ClientsTableContract = Pick<
+  Contract,
+  "id" | "type" | "description" | "installments_count" | "periodicity" | "status" | "total_amount"
+> & { client: Pick<Client, "name" | "phone"> };
 import { formatCurrency, formatPhone, initials } from "@/lib/utils";
 
 // "quitado" e "cancelado" não chegam mais aqui (filtrados já na query de
@@ -22,7 +28,7 @@ const TABS: { value: FilterTab; label: string }[] = [
   { value: "inadimplente", label: "Inadimplentes" },
 ];
 
-export function ClientsTable({ contracts }: { contracts: ContractWithClient[] }) {
+export function ClientsTable({ contracts }: { contracts: ClientsTableContract[] }) {
   const [tab, setTab] = useState<FilterTab>("todos");
   const [query, setQuery] = useState("");
 

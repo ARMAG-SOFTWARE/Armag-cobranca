@@ -44,16 +44,16 @@ export interface IphoneSalesSummary {
 export async function getIphoneSales(
   supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<{ sales: IphoneSale[]; summary: IphoneSalesSummary }> {
-  const [{ data: phonesData }, { data: paymentsData }] = await Promise.all([
-    supabase
-      .from("phones")
-      .select(
-        "*, contract:contracts(id, status, principal_amount, total_amount, installments_count, has_down_payment, down_payment_amount, client:clients(id, name, phone))",
-      )
-      .not("contract_id", "is", null)
-      .order("created_at", { ascending: false }),
-    supabase.from("payments").select("contract_id, principal_amount, interest_amount"),
-  ]);
+  // Os pagamentos vêm aninhados no contrato de cada venda — só os das
+  // vendas, em vez de buscar todos os pagamentos (inclusive de empréstimos)
+  // para depois descartar a maioria.
+  const { data: phonesData } = await supabase
+    .from("phones")
+    .select(
+      "*, contract:contracts(id, status, principal_amount, total_amount, installments_count, has_down_payment, down_payment_amount, client:clients(id, name, phone), payments(principal_amount, interest_amount))",
+    )
+    .not("contract_id", "is", null)
+    .order("created_at", { ascending: false });
 
   type PhoneRow = Phone & {
     contract:
@@ -66,16 +66,22 @@ export async function getIphoneSales(
           | "installments_count"
           | "has_down_payment"
           | "down_payment_amount"
-        > & { client: Pick<Client, "id" | "name" | "phone"> })
+        > & {
+          client: Pick<Client, "id" | "name" | "phone">;
+          payments: { principal_amount: number; interest_amount: number }[];
+        })
       | null;
   };
   const phones = (phonesData ?? []) as PhoneRow[];
-  const payments = (paymentsData ?? []) as { contract_id: string; principal_amount: number; interest_amount: number }[];
 
   const receivedByContract = new Map<string, number>();
-  for (const payment of payments) {
-    const total = roundCents(payment.principal_amount + payment.interest_amount);
-    receivedByContract.set(payment.contract_id, roundCents((receivedByContract.get(payment.contract_id) ?? 0) + total));
+  for (const phone of phones) {
+    if (!phone.contract) continue;
+    const received = (phone.contract.payments ?? []).reduce(
+      (sum, payment) => roundCents(sum + payment.principal_amount + payment.interest_amount),
+      0,
+    );
+    receivedByContract.set(phone.contract.id, received);
   }
 
   const sales: IphoneSale[] = [];

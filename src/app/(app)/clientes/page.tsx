@@ -1,10 +1,9 @@
-import { ClientsTable } from "@/components/clients-table";
+import { ClientsTable, type ClientsTableContract } from "@/components/clients-table";
 import { ExpenseDialog } from "@/components/expense-dialog";
 import { NewTransactionDialog } from "@/components/new-transaction-dialog";
 import { GradientHeading } from "@/components/ui/gradient-heading";
 import { ShinyText } from "@/components/ui/shiny-text";
 import { createClient } from "@/lib/supabase/server";
-import type { ContractWithInstallments } from "@/lib/types";
 import { BRAND } from "@/lib/brand";
 
 export const dynamic = "force-dynamic";
@@ -18,12 +17,14 @@ export default async function ClientesPage() {
   // só não entram mais nesta tela.
   const { data, error } = await supabase
     .from("contracts")
-    .select("*, client:clients(*), installments(*)")
+    // Só as colunas que a tabela usa — sem as parcelas (a listagem não as
+    // mostra) e sem o cadastro completo do cliente.
+    .select("id, type, description, installments_count, periodicity, status, total_amount, client:clients(name, phone)")
     .neq("status", "cancelado")
     .neq("status", "quitado")
     .order("created_at", { ascending: false });
 
-  const contracts = (data ?? []) as ContractWithInstallments[];
+  const contracts = (data ?? []) as unknown as ClientsTableContract[];
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 sm:py-10">
