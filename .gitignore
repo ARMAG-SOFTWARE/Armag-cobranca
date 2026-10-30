@@ -37,6 +37,8 @@ yarn-error.log*
 .env*
 # Modelo só com os NOMES das variáveis (sem valores) — versionado de propósito.
 !.env.example
+# Modelo de homologação (só nomes, sem valores) — versionado de propósito.
+!.env.homologacao.example
 
 # vercel
 .vercel
