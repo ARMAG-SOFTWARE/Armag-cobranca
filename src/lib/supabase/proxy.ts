@@ -45,9 +45,13 @@ export async function updateSession(request: NextRequest) {
   const { data: claimsData } = await supabase.auth.getClaims();
   const user = claimsData?.claims ?? null;
 
-  const isLoginRoute = request.nextUrl.pathname.startsWith("/login");
+  const pathname = request.nextUrl.pathname;
+  const isLoginRoute = pathname.startsWith("/login");
+  // Rotas abertas sem sessão: login, pedido de redefinição de senha e a
+  // confirmação do link do e-mail (que é justamente quem cria a sessão).
+  const isPublicRoute = isLoginRoute || pathname.startsWith("/esqueci-senha") || pathname.startsWith("/auth/");
 
-  if (!user && !isLoginRoute) {
+  if (!user && !isPublicRoute) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);

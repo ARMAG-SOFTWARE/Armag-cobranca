@@ -32,6 +32,10 @@ das diferenças em relação ao original está em [`ADAPTACOES.md`](./ADAPTACOES
 | Campos do produto | Cor, bateria e IMEI continuam disponíveis e opcionais. |
 | Abatimento parcial | Um valor recebido de uma vez é aplicado nas parcelas em aberto, da mais antiga para a mais nova, sem perdoar nada (diferente da quitação total, que encerra a dívida). |
 | Renovação de parcela | Paga só o juros de atraso pendente e empurra o vencimento 1 período (inclusive 1 dia, na diária); o principal continua em aberto. |
+| Estorno de pagamento | No histórico do contrato, "Estornar" desfaz o pagamento mais recente de uma parcela (valor volta a ficar em aberto). Entrada, quitação total e renovação não são estornáveis. |
+| Despesas | Tela própria no menu para listar, editar e excluir saídas. |
+| Clientes encerrados | Aba "Encerrados" em Clientes com contratos quitados e cancelados. |
+| Esqueci minha senha | Link na tela de login; o usuário recebe um e-mail e cria a nova senha. |
 | Editar periodicidade | Reencaixa só as datas das parcelas em aberto (parcelas com pagamento nunca mudam). O valor combinado do contrato não muda; em pods, a nova agenda ainda precisa caber em 4 semanas. |
 
 Todas as fórmulas ficam em `src/lib/financial-rules.ts` e são cobertas por
@@ -44,7 +48,7 @@ Todas as fórmulas ficam em `src/lib/financial-rules.ts` e são cobertas por
 1. Em [supabase.com](https://supabase.com), crie um projeto (região **South America (São Paulo)**,
    senha do banco forte, guardada num gerenciador de senhas).
 2. **SQL Editor**: rode os arquivos de `supabase/migrations/` **em ordem numérica**
-   (`0001` … `0024`). Funcionam num banco vazio, sem usuário criado. Alternativa pela CLI:
+   (`0001` … `0025`). Funcionam num banco vazio, sem usuário criado. Alternativa pela CLI:
    `supabase link --project-ref <ref>` e `supabase db push`.
 3. **Authentication → Sign In / Providers**: mantenha "Email" ligado e **desligue "Allow new users
    to sign up"** (não existe cadastro público no app).
@@ -53,6 +57,17 @@ Todas as fórmulas ficam em `src/lib/financial-rules.ts` e são cobertas por
 5. **Authentication → URL Configuration**: Site URL = domínio de produção; adicione o domínio
    em Redirect URLs.
 6. **Project Settings → API**: copie URL, `anon` key e `service_role` key para a Vercel (passo 2).
+
+### 1.1. E-mail de "Esqueci minha senha"
+
+1. **Authentication → URL Configuration → Redirect URLs**: adicione
+   `https://SEU-DOMINIO/auth/confirm` (e o endereço `.vercel.app`, se usar).
+2. **Authentication → Emails → Reset Password**: troque o link do modelo para
+   `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/redefinir-senha`.
+   Assim o link funciona mesmo se aberto em outro aparelho. Sem essa troca, ele
+   só funciona no mesmo navegador em que a redefinição foi pedida.
+3. O envio de e-mail padrão do Supabase tem limite baixo (poucos e-mails por
+   hora). Para uso real, configure um SMTP próprio em **Authentication → Emails → SMTP Settings**.
 
 ### 2. Vercel (projeto novo, exclusivo deste sistema)
 

@@ -6,7 +6,14 @@ import { headers } from "next/headers";
 import { logAudit } from "@/lib/audit-log";
 import { checkRateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
-import { loginSchema, type LoginInput } from "@/lib/validations";
+import {
+  loginSchema,
+  newPasswordSchema,
+  passwordResetRequestSchema,
+  type LoginInput,
+  type NewPasswordInput,
+  type PasswordResetRequestInput,
+} from "@/lib/validations";
 import type { ActionResult } from "@/app/actions";
 
 async function clientIp(): Promise<string> {
@@ -62,4 +69,58 @@ export async function signOut(): Promise<void> {
   await logAudit(supabase, { actorEmail: user?.email ?? null, ownerId: user?.id ?? null, action: "logout" });
   await supabase.auth.signOut();
   redirect("/login");
+}
+
+/** Origem pública do app (ex.: https://armag.vercel.app), a partir da própria requisição. */
+async function appOrigin(): Promise<string> {
+  const hdrs = await headers();
+  const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
+  const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+/**
+ * "Esqueci minha senha": envia o e-mail de redefinição do Supabase Auth.
+ * A resposta é SEMPRE a mesma, exista o e-mail ou não — nunca revela quais
+ * contas existem. Limitado pelo mesmo controle de tentativas do login.
+ */
+export async function requestPasswordReset(input: PasswordResetRequestInput): Promise<ActionResult> {
+  const parsed = passwordResetRequestSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const email = parsed.data.email.trim().toLowerCase();
+  const ip = await clientIp();
+  const { allowed, retryAfterSeconds } = checkRateLimit(`reset:${ip}:${email}`);
+  if (!allowed) {
+    return {
+      ok: false,
+      error: `Muitas tentativas. Tente novamente em ${Math.ceil(retryAfterSeconds / 60)} minuto(s).`,
+    };
+  }
+
+  const supabase = await createClient();
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${await appOrigin()}/auth/confirm?next=/redefinir-senha`,
+  });
+  await logAudit(createServiceRoleClient(), { actorEmail: email, ownerId: null, action: "password_reset_requested" });
+  return { ok: true };
+}
+
+/** Grava a nova senha do usuário que chegou pelo link de redefinição (já com sessão). */
+export async function updatePassword(input: NewPasswordInput): Promise<ActionResult> {
+  const parsed = newPasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.updateUser({ password: parsed.data.password });
+  if (error || !data.user) {
+    return { ok: false, error: "Não foi possível alterar a senha. Peça um novo link de redefinição." };
+  }
+
+  await logAudit(supabase, { actorEmail: data.user.email ?? null, ownerId: data.user.id, action: "password_changed" });
+  return { ok: true };
 }

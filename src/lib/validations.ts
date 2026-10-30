@@ -232,6 +232,24 @@ export const loginSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
+export const passwordResetRequestSchema = z.object({
+  email: z.string().trim().email("Informe um e-mail válido."),
+});
+
+export type PasswordResetRequestInput = z.infer<typeof passwordResetRequestSchema>;
+
+export const newPasswordSchema = z
+  .object({
+    password: z.string().min(8, "A nova senha deve ter pelo menos 8 caracteres."),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "As senhas não conferem.",
+    path: ["confirmPassword"],
+  });
+
+export type NewPasswordInput = z.infer<typeof newPasswordSchema>;
+
 export const clientInfoSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome do cliente."),
   phone: z.string().trim().min(10, "Informe um telefone/WhatsApp válido."),

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SpotlightCard } from "@/components/ui/spotlight-card";
@@ -42,6 +43,12 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <LoginForm />
+          <Link
+            href="/esqueci-senha"
+            className="mt-4 block text-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            Esqueci minha senha
+          </Link>
         </CardContent>
       </SpotlightCard>
     </main>
