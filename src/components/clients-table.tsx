@@ -10,23 +10,29 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ContractStatusBadge, ContractTypeBadge } from "@/components/status-badge";
 import { PERIODICITY_LABELS, type Client, type Contract } from "@/lib/types";
+import { formatCurrency, formatPhone, initials } from "@/lib/utils";
 
 /** Só o que a tabela exibe/filtra — a página busca exatamente estas colunas. */
 export type ClientsTableContract = Pick<
   Contract,
   "id" | "type" | "description" | "installments_count" | "periodicity" | "status" | "total_amount"
 > & { client: Pick<Client, "name" | "phone"> };
-import { formatCurrency, formatPhone, initials } from "@/lib/utils";
 
-// "quitado" e "cancelado" não chegam mais aqui (filtrados já na query de
-// clientes/page.tsx) — sem aba pra eles, ficaria sempre vazia.
-type FilterTab = "todos" | "ativo" | "inadimplente";
+// "Todos" mostra só o que está em andamento (ativo + inadimplente) — quitados
+// e cancelados poluíam a listagem. Eles ficam na aba "Encerrados", para
+// consulta do histórico.
+type FilterTab = "todos" | "ativo" | "inadimplente" | "encerrados";
 
 const TABS: { value: FilterTab; label: string }[] = [
   { value: "todos", label: "Todos" },
   { value: "ativo", label: "Ativos" },
   { value: "inadimplente", label: "Inadimplentes" },
+  { value: "encerrados", label: "Encerrados" },
 ];
+
+function isClosed(status: ClientsTableContract["status"]) {
+  return status === "quitado" || status === "cancelado";
+}
 
 export function ClientsTable({ contracts }: { contracts: ClientsTableContract[] }) {
   const [tab, setTab] = useState<FilterTab>("todos");
@@ -41,7 +47,13 @@ export function ClientsTable({ contracts }: { contracts: ClientsTableContract[] 
     // exatamente isso que fazia a pesquisa parecer quebrada.
     const qDigits = q.replace(/\D/g, "");
     return contracts.filter((contract) => {
-      if (tab !== "todos" && contract.status !== tab) return false;
+      if (tab === "encerrados") {
+        if (!isClosed(contract.status)) return false;
+      } else if (isClosed(contract.status)) {
+        return false;
+      } else if (tab !== "todos" && contract.status !== tab) {
+        return false;
+      }
       if (!q) return true;
       return (
         contract.client.name.toLowerCase().includes(q) ||
