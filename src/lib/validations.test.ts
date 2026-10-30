@@ -1,6 +1,34 @@
 import { describe, expect, it } from "vitest";
 
-import { isAllowedProviderBaseUrl, transactionSchema } from "@/lib/validations";
+import { isAllowedProviderBaseUrl, isPrivateOrReservedIp, transactionSchema } from "@/lib/validations";
+
+describe("isPrivateOrReservedIp", () => {
+  it("marca IPs privados/reservados/loopback/link-local/ULA/CGNAT", () => {
+    for (const ip of [
+      "127.0.0.1",
+      "10.0.0.5",
+      "172.16.0.1",
+      "172.31.255.255",
+      "192.168.1.10",
+      "169.254.169.254",
+      "100.64.0.1",
+      "0.0.0.0",
+      "224.0.0.1",
+      "::1",
+      "fe80::1",
+      "fd00::1",
+      "::ffff:10.0.0.1",
+    ]) {
+      expect(isPrivateOrReservedIp(ip), ip).toBe(true);
+    }
+  });
+
+  it("não marca IPs públicos", () => {
+    for (const ip of ["203.0.113.10", "8.8.8.8", "172.15.0.1", "172.32.0.1", "2606:4700::1111", "::ffff:203.0.113.10"]) {
+      expect(isPrivateOrReservedIp(ip), ip).toBe(false);
+    }
+  });
+});
 
 describe("isAllowedProviderBaseUrl", () => {
   it("aceita URLs públicas http(s)", () => {
