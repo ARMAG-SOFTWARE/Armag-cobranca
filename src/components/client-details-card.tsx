@@ -19,6 +19,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MaskedInput } from "@/components/ui/masked-input";
+import { maskCep } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { SpotlightCard } from "@/components/ui/spotlight-card";
 import type { Client } from "@/lib/types";
@@ -28,7 +30,7 @@ import { deleteClientDocument, updateClientAddress, uploadClientDocument } from 
 function formatAddress(client: Client) {
   const line1 = [client.street, client.street_number].filter(Boolean).join(", ");
   const line2 = [client.neighborhood, client.city, client.state].filter(Boolean).join(", ");
-  const parts = [line1, line2, client.zip_code].filter(Boolean);
+  const parts = [line1, line2, client.zip_code ? maskCep(client.zip_code) : null].filter(Boolean);
   return parts.length > 0 ? parts.join(" — ") : null;
 }
 
@@ -42,7 +44,7 @@ function EditAddressDialog({ client }: { client: Client }) {
     neighborhood: client.neighborhood ?? "",
     city: client.city ?? "",
     state: client.state ?? "",
-    zipCode: client.zip_code ?? "",
+    zipCode: maskCep(client.zip_code ?? ""),
   };
 
   const {
@@ -114,7 +116,7 @@ function EditAddressDialog({ client }: { client: Client }) {
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="zipCode">CEP</Label>
-            <Input id="zipCode" placeholder="00000-000" {...register("zipCode")} />
+            <MaskedInput mask="cep" id="zipCode" placeholder="00000-000" {...register("zipCode")} />
           </div>
 
           <DialogFooter>

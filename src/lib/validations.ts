@@ -4,11 +4,23 @@ import { PRODUCT_SALE_MAX_WEEKS } from "@/lib/financial-rules";
 import { IMEI_PATTERN } from "@/lib/imei";
 import { installmentPlanSpanDays } from "@/lib/installments";
 
+/** Telefone brasileiro: DDD + número (10 ou 11 dígitos), com ou sem máscara. */
+const phoneDigitsCount = (value: string) => value.replace(/\D/g, "").length;
+const brPhone = (message: string) =>
+  z.string().trim().refine((value) => [10, 11].includes(phoneDigitsCount(value)), { message });
+const optionalBrPhone = (message: string) =>
+  z
+    .string()
+    .trim()
+    .refine((value) => value === "" || [10, 11].includes(phoneDigitsCount(value)), { message })
+    .optional()
+    .or(z.literal(""));
+
 export const transactionSchema = z
   .object({
     clientId: z.string().uuid().optional(),
     clientName: z.string().trim().min(2, "Informe o nome do cliente."),
-    clientPhone: z.string().trim().min(10, "Informe um telefone/WhatsApp válido."),
+    clientPhone: brPhone("Informe um telefone/WhatsApp válido, com DDD."),
     clientEmail: z.string().trim().email().optional().or(z.literal("")),
     type: z.enum(["emprestimo", "venda_iphone"]),
     description: z.string().trim().optional().or(z.literal("")),
@@ -220,7 +232,7 @@ export const messageSettingsSchema = z.object({
   templateName: z.string().trim().optional().or(z.literal("")),
   templateLanguage: z.string().trim().optional().or(z.literal("")),
   /** Recebe alerta via WhatsApp quando o backup automático falhar. Opcional. */
-  adminAlertPhone: z.string().trim().optional().or(z.literal("")),
+  adminAlertPhone: optionalBrPhone("Telefone de alerta inválido — informe DDD + número."),
 });
 
 export type MessageSettingsInput = z.infer<typeof messageSettingsSchema>;
@@ -252,7 +264,7 @@ export type NewPasswordInput = z.infer<typeof newPasswordSchema>;
 
 export const clientInfoSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome do cliente."),
-  phone: z.string().trim().min(10, "Informe um telefone/WhatsApp válido."),
+  phone: brPhone("Informe um telefone/WhatsApp válido, com DDD."),
   email: z.string().trim().email("E-mail inválido.").optional().or(z.literal("")),
   notes: z.string().trim().optional().or(z.literal("")),
 });
@@ -293,7 +305,7 @@ export const businessSettingsSchema = z.object({
     .min(0, "O juros não pode ser negativo.")
     .max(100, "Juros muito alto — confira o valor digitado."),
   whatsappOpenMode: z.enum(["padrao", "business_android", "web"]),
-  businessWhatsappNumber: z.string().trim().optional().or(z.literal("")),
+  businessWhatsappNumber: optionalBrPhone("Número inválido — informe DDD + número."),
 });
 
 export type BusinessSettingsInput = z.infer<typeof businessSettingsSchema>;

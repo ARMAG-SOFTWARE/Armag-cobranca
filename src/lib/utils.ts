@@ -38,14 +38,38 @@ export function formatDateTime(value: string | Date) {
 }
 
 export function formatPhone(value: string) {
-  const digits = value.replace(/\D/g, "");
+  let digits = value.replace(/\D/g, "");
+  // Com DDI 55 (12 ou 13 dígitos): exibe +55 antes do número nacional.
+  const withCountry = digits.startsWith("55") && (digits.length === 12 || digits.length === 13);
+  if (withCountry) digits = digits.slice(2);
+  const prefix = withCountry ? "+55 " : "";
   if (digits.length === 11) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+    return `${prefix}(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   }
   if (digits.length === 10) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `${prefix}(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
   }
   return value;
+}
+
+/**
+ * Máscara de telefone enquanto o usuário digita: (11) 91234-5678 para
+ * celular, (11) 1234-5678 para fixo. Aceita no máximo 11 dígitos (DDD +
+ * número); o que vai para o banco continua sendo só os dígitos.
+ */
+export function maskPhone(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length === 0) return "";
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+/** Máscara de CEP enquanto o usuário digita: 00000-000. */
+export function maskCep(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  return digits.length <= 5 ? digits : `${digits.slice(0, 5)}-${digits.slice(5)}`;
 }
 
 export function onlyDigits(value: string) {

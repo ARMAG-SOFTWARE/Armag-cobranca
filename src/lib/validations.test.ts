@@ -80,3 +80,26 @@ describe("transactionSchema — venda de produto (pods) em até 4 semanas", () =
     expect(result.success).toBe(true);
   });
 });
+
+describe("telefones com máscara", () => {
+  const base = {
+    clientName: "Cliente Teste",
+    type: "emprestimo" as const,
+    totalAmount: 100,
+    installmentsCount: 4,
+    periodicity: "semanal" as const,
+    firstDueDate: "2026-11-02",
+    interestRatePercent: 7.5,
+    hasDownPayment: false,
+    downPaymentAmount: 0,
+    downPaymentMethod: "dinheiro" as const,
+  };
+
+  it.each(["(11) 91234-5678", "11912345678", "(11) 1234-5678"])("aceita %s", (clientPhone) => {
+    expect(transactionSchema.safeParse({ ...base, clientPhone }).success).toBe(true);
+  });
+
+  it.each(["(11) 9123", "91234-5678", "(11) 91234-56789"])("recusa %s", (clientPhone) => {
+    expect(transactionSchema.safeParse({ ...base, clientPhone }).success).toBe(false);
+  });
+});

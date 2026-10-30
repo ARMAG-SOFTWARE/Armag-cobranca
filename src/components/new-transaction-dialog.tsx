@@ -18,6 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MaskedInput } from "@/components/ui/masked-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -181,7 +182,7 @@ export function NewTransactionDialog() {
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="clientPhone">Telefone / WhatsApp</Label>
-              <Input id="clientPhone" placeholder="(11) 91234-5678" {...register("clientPhone")} />
+              <MaskedInput mask="phone" id="clientPhone" placeholder="(11) 91234-5678" {...register("clientPhone")} />
               {errors.clientPhone && <p className="text-xs text-destructive">{errors.clientPhone.message}</p>}
             </div>
           </div>

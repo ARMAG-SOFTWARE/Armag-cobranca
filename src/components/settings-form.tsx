@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { MaskedInput } from "@/components/ui/masked-input";
+import { maskPhone } from "@/lib/utils";
 import { SpotlightCard } from "@/components/ui/spotlight-card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -87,7 +89,7 @@ export function SettingsForm({
       messageTemplate: initialSettings?.message_template ?? DEFAULT_TEMPLATE,
       templateName: initialSettings?.template_name ?? "",
       templateLanguage: initialSettings?.template_language ?? "pt_BR",
-      adminAlertPhone: initialSettings?.admin_alert_phone ?? "",
+      adminAlertPhone: maskPhone(initialSettings?.admin_alert_phone ?? ""),
     },
   });
 
@@ -214,7 +216,7 @@ export function SettingsForm({
         <CardContent>
           <div className="grid gap-1.5 sm:max-w-xs">
             <Label htmlFor="adminAlertPhone">Telefone para alertas (opcional)</Label>
-            <Input id="adminAlertPhone" placeholder="(11) 91234-5678" {...register("adminAlertPhone")} />
+            <MaskedInput mask="phone" id="adminAlertPhone" placeholder="(11) 91234-5678" {...register("adminAlertPhone")} />
           </div>
         </CardContent>
       </SpotlightCard>
@@ -233,7 +235,8 @@ export function SettingsForm({
         <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="grid flex-1 gap-1.5">
             <Label htmlFor="testPhone">Telefone para teste</Label>
-            <Input
+            <MaskedInput
+              mask="phone"
               id="testPhone"
               placeholder="(11) 91234-5678"
               value={testPhone}

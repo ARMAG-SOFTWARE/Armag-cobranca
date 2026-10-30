@@ -18,6 +18,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MaskedInput } from "@/components/ui/masked-input";
+import { maskPhone } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Client } from "@/lib/types";
@@ -30,7 +32,7 @@ export function EditClientInfoDialog({ client }: { client: Client }) {
 
   const defaultValues: ClientInfoInput = {
     name: client.name,
-    phone: client.phone,
+    phone: maskPhone(client.phone),
     email: client.email ?? "",
     notes: client.notes ?? "",
   };
@@ -88,7 +90,7 @@ export function EditClientInfoDialog({ client }: { client: Client }) {
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="client-phone">Telefone / WhatsApp</Label>
-            <Input id="client-phone" placeholder="(11) 91234-5678" {...register("phone")} />
+            <MaskedInput mask="phone" id="client-phone" placeholder="(11) 91234-5678" {...register("phone")} />
             {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
           </div>
           <div className="grid gap-1.5">

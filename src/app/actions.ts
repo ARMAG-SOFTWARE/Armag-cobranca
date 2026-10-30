@@ -2077,7 +2077,7 @@ export async function saveMessageSettings(input: MessageSettingsInput): Promise<
     message_template: data.messageTemplate,
     template_name: data.templateName || null,
     template_language: data.templateLanguage || "pt_BR",
-    admin_alert_phone: data.adminAlertPhone || null,
+    admin_alert_phone: data.adminAlertPhone ? onlyDigits(data.adminAlertPhone) : null,
     is_active: true,
   });
 

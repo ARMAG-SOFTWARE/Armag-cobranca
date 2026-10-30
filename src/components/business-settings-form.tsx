@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { MaskedInput } from "@/components/ui/masked-input";
+import { maskPhone } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SpotlightCard } from "@/components/ui/spotlight-card";
@@ -27,7 +29,7 @@ export function BusinessSettingsForm({ initialSettings }: { initialSettings: Eff
     defaultValues: {
       lateInterestRatePercentPerDay: initialSettings.lateInterestRatePercentPerDay,
       whatsappOpenMode: initialSettings.whatsappOpenMode,
-      businessWhatsappNumber: initialSettings.businessWhatsappNumber ?? "",
+      businessWhatsappNumber: maskPhone(initialSettings.businessWhatsappNumber ?? ""),
     },
   });
 
@@ -92,9 +94,9 @@ export function BusinessSettingsForm({ initialSettings }: { initialSettings: Eff
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="businessWhatsappNumber">Número do WhatsApp Business (opcional)</Label>
-              <Input
+              <MaskedInput
+                mask="phone"
                 id="businessWhatsappNumber"
-                inputMode="tel"
                 placeholder="(11) 91234-5678"
                 {...register("businessWhatsappNumber")}
               />
