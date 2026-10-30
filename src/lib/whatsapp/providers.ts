@@ -1,5 +1,6 @@
 import type { MessageSettings } from "@/lib/types";
 import { onlyDigits } from "@/lib/utils";
+import { safeProviderFetch } from "@/lib/whatsapp/safe-fetch";
 
 export interface WhatsAppSendResult {
   ok: boolean;
@@ -45,7 +46,7 @@ class EvolutionApiProvider implements WhatsAppProvider {
       throw new Error("Configuração incompleta para Evolution API (base_url, api_key, instance_id).");
     }
 
-    const response = await fetch(`${base_url.replace(/\/$/, "")}/message/sendText/${instance_id}`, {
+    const response = await safeProviderFetch(`${base_url.replace(/\/$/, "")}/message/sendText/${instance_id}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -75,7 +76,7 @@ class ZApiProvider implements WhatsAppProvider {
     }
 
     const url = `${base_url.replace(/\/$/, "")}/instances/${instance_id}/token/${api_key}/send-text`;
-    const response = await fetch(url, {
+    const response = await safeProviderFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -102,6 +103,8 @@ class TwilioProvider implements WhatsAppProvider {
       throw new Error("Configuração incompleta para Twilio (Account SID, Auth Token, número remetente).");
     }
 
+    // Host fixo e confiável (api.twilio.com) — não é controlado pelo usuário,
+    // então não precisa do guard anti-SSRF de `safeProviderFetch`.
     const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
     const body = new URLSearchParams({
       From: `whatsapp:${sender_number}`,
@@ -137,7 +140,7 @@ class WppConnectProvider implements WhatsAppProvider {
     }
 
     const url = `${base_url.replace(/\/$/, "")}/api/${instance_id}/send-message`;
-    const response = await fetch(url, {
+    const response = await safeProviderFetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -181,6 +184,7 @@ class MetaCloudApiProvider implements WhatsAppProvider {
       );
     }
 
+    // Host fixo e confiável (graph.facebook.com) — não controlado pelo usuário.
     const url = `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${phoneNumberId}/messages`;
     const response = await fetch(url, {
       method: "POST",

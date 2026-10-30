@@ -1,4 +1,5 @@
 import type { MessageSettings } from "@/lib/types";
+import { safeProviderFetch } from "@/lib/whatsapp/safe-fetch";
 
 export interface EvolutionHealthResult {
   ok: boolean;
@@ -22,7 +23,7 @@ export async function checkEvolutionConnection(settings: MessageSettings): Promi
   }
 
   try {
-    const response = await fetch(
+    const response = await safeProviderFetch(
       `${base_url.replace(/\/$/, "")}/instance/connectionState/${instance_id}`,
       { headers: { apikey: api_key } },
     );

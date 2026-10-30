@@ -176,10 +176,48 @@ export const contractDisbursementSchema = z.object({
 export type ContractDisbursementInput = z.infer<typeof contractDisbursementSchema>;
 
 /**
+ * Um IP literal (já resolvido) pertence a uma faixa privada, reservada,
+ * loopback, link-local, ULA ou CGNAT? Fonte única de verdade dessa decisão,
+ * usada em DOIS lugares: (1) na validação da string da URL abaixo e (2) na
+ * checagem do IP RESOLVIDO via DNS imediatamente antes do fetch do provedor
+ * (ver `safeProviderFetch` em lib/whatsapp/safe-fetch.ts) — porque um host
+ * público pode resolver para um IP interno (DNS rebinding), e a validação só
+ * da string não pega isso.
+ */
+export function isPrivateOrReservedIp(ip: string): boolean {
+  const host = ip.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host.includes(":")) {
+    // IPv6: loopback, não especificado, link-local (fe80::/10) e ULA (fc00::/7).
+    if (host === "::1" || host === "::") return true;
+    if (/^(fe8|fe9|fea|feb|fc|fd)/.test(host)) return true;
+    // IPv4 mapeado em IPv6 (::ffff:a.b.c.d): valida a parte IPv4 embutida.
+    if (host.startsWith("::ffff:")) {
+      const mapped = host.slice("::ffff:".length);
+      return mapped.includes(".") ? isPrivateOrReservedIp(mapped) : true;
+    }
+    return false;
+  }
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!ipv4) return false;
+  const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+  if (a === 0 || a === 10 || a === 127 || a >= 224) return true; // "este host", 10/8, loopback, multicast/reservado
+  if (a === 169 && b === 254) return true; // link-local / metadata de nuvem
+  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16/12
+  if (a === 192 && b === 168) return true; // 192.168/16
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64/10
+  return false;
+}
+
+/**
  * A URL do provedor é chamada pelo SERVIDOR (fetch em lib/whatsapp), então
  * nunca pode apontar para a rede interna (localhost, IPs privados, metadata
  * de nuvem): sem esta trava, qualquer usuário logado faria o servidor
  * acessar endereços internos. Só http(s) e só hosts públicos.
+ *
+ * Esta é a defesa de ENTRADA (valida o que o usuário salva). A defesa de
+ * SAÍDA — validar o IP efetivamente resolvido e nunca seguir redirect — fica
+ * em `safeProviderFetch`, porque esta checagem sozinha não cobre um domínio
+ * público que resolve para um IP interno (DNS rebinding).
  */
 export function isAllowedProviderBaseUrl(value: string): boolean {
   let url: URL;
@@ -196,17 +234,13 @@ export function isAllowedProviderBaseUrl(value: string): boolean {
     return false;
   }
   if (host.includes(":")) {
-    // IPv6 literal: bloqueia loopback, não especificado, link-local, ULA e IPv4 mapeado.
-    return !(host === "::1" || host === "::" || /^(fe8|fe9|fea|feb|fc|fd)/.test(host) || host.startsWith("::ffff:"));
+    // IPv6 literal: além das faixas privadas, bloqueia qualquer IPv4 mapeado
+    // literal numa URL (forma suspeita, nunca legítima para um provedor).
+    if (host.startsWith("::ffff:")) return false;
+    return !isPrivateOrReservedIp(host);
   }
-  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4) {
-    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
-    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    if (a === 100 && b >= 64 && b <= 127) return false;
+  if (/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(host)) {
+    if (isPrivateOrReservedIp(host)) return false;
   } else if (/^\d+$/.test(host) || /^0x/i.test(host)) {
     // Formas numéricas alternativas de IP (ex.: 2130706433, 0x7f000001).
     return false;
