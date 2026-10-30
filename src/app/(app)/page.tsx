@@ -5,7 +5,6 @@ import { DashboardOverview } from "@/components/dashboard-overview";
 import { GradientHeading } from "@/components/ui/gradient-heading";
 import { ShinyText } from "@/components/ui/shiny-text";
 import { StatTile } from "@/components/ui/stat-tile";
-import { businessMonthStartUTC } from "@/lib/date-utils";
 import {
   computeDashboardMetrics,
   type DashboardContractInput,
@@ -13,6 +12,7 @@ import {
   type DashboardPaymentInput,
 } from "@/lib/dashboard-metrics";
 import { getTodayDebtors } from "@/lib/debtors";
+import { roundCents } from "@/lib/financial-rules";
 import { createClient } from "@/lib/supabase/server";
 import type { Phone } from "@/lib/types";
 import { BRAND } from "@/lib/brand";
@@ -22,10 +22,7 @@ import { BRAND } from "@/lib/brand";
  * ativos), nunca do cadastro completo do cliente — o join `client:clients(*)`
  * usado por outras telas não é necessário aqui.
  */
-type DashboardPageContract = DashboardContractInput & {
-  client_id: string;
-  installments: (DashboardContractInput["installments"][number] & { paid_at: string | null })[];
-};
+type DashboardPageContract = DashboardContractInput & { client_id: string };
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +45,7 @@ export default async function DashboardPage() {
     supabase
       .from("contracts")
       .select(
-        "id, client_id, status, type, principal_amount, total_amount, has_down_payment, down_payment_amount, disbursed_at, installments(amount, paid_principal_amount, status, paid_at)",
+        "id, client_id, status, type, principal_amount, total_amount, has_down_payment, down_payment_amount, disbursed_at, installments(amount, paid_principal_amount, status)",
       )
       .order("created_at", { ascending: false }),
     supabase
@@ -68,10 +65,15 @@ export default async function DashboardPage() {
   // Contratos cancelados (ex.: cadastrados errado e excluídos) não devem
   // continuar contando como saldo em aberto.
   const nonCancelledContracts = contracts.filter((c) => c.status !== "cancelado");
-  const outstandingAmount = nonCancelledContracts
-    .flatMap((contract) => contract.installments ?? [])
-    .filter((installment) => installment.status !== "pago")
-    .reduce((sum, installment) => sum + installment.amount, 0);
+  // Saldo realmente em aberto: o que falta de cada parcela não quitada
+  // (valor − principal já pago), nunca o valor cheio de uma parcela que
+  // já recebeu pagamento parcial.
+  const outstandingAmount = roundCents(
+    nonCancelledContracts
+      .flatMap((contract) => contract.installments ?? [])
+      .filter((installment) => installment.status !== "pago")
+      .reduce((sum, installment) => sum + Math.max(installment.amount - installment.paid_principal_amount, 0), 0),
+  );
 
   const activeClients = new Set(
     contracts.filter((c) => c.status === "ativo" || c.status === "inadimplente").map((c) => c.client_id),
@@ -79,14 +81,10 @@ export default async function DashboardPage() {
 
   const overdueCount = contracts.filter((c) => c.status === "inadimplente").length;
 
-  // Valores já recebidos permanecem no histórico mesmo que o contrato seja
-  // cancelado depois — por isso usa `contracts` (todos), não `nonCancelledContracts`.
-  const monthStart = businessMonthStartUTC();
-  const receivedThisMonth = contracts
-    .flatMap((contract) => contract.installments ?? [])
-    .filter((installment) => installment.status === "pago" && installment.paid_at)
-    .filter((installment) => new Date(installment.paid_at!) >= monthStart)
-    .reduce((sum, installment) => sum + installment.amount, 0);
+  // Tudo o que entrou no mês, pelos pagamentos registrados — parcela
+  // inteira ou parcial, juros, entrada, quitação, abatimento e renovação —
+  // o mesmo valor de "Entradas do mês" dos indicadores abaixo.
+  const receivedThisMonth = metrics.income.month;
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 sm:py-10">
