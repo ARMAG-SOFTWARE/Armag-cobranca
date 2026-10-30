@@ -1363,6 +1363,88 @@ export async function registerExpense(input: ExpenseInput): Promise<ActionResult
 
   revalidatePath("/");
   revalidatePath("/clientes");
+  revalidatePath("/despesas");
+  return { ok: true };
+}
+
+/** Corrige uma saída lançada errada (o RLS limita à do próprio usuário). */
+export async function updateExpense(expenseId: string, input: ExpenseInput): Promise<ActionResult> {
+  const parsed = expenseSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const data = parsed.data;
+  const supabase = await createClient();
+  const ownerId = await getCurrentUserId(supabase);
+  if (!ownerId) {
+    return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  }
+
+  const { data: updated, error } = await supabase
+    .from("expenses")
+    .update({
+      description: data.description,
+      category: data.category || null,
+      amount: roundCents(data.amount),
+      method: data.method,
+      expense_date: data.expenseDate,
+      notes: data.notes || null,
+    })
+    .eq("id", expenseId)
+    .select("id")
+    .maybeSingle();
+
+  if (error || !updated) {
+    return { ok: false, error: safeError(error, "Saída não encontrada.") };
+  }
+
+  await logAudit(supabase, {
+    actorEmail: await getCurrentUserEmail(supabase),
+    ownerId,
+    action: "expense_updated",
+    resourceType: "expense",
+    resourceId: expenseId,
+    metadata: { amount: roundCents(data.amount), method: data.method, expenseDate: data.expenseDate },
+  });
+  revalidatePath("/");
+  revalidatePath("/despesas");
+  return { ok: true };
+}
+
+/** Exclui uma saída lançada errada (o RLS limita à do próprio usuário). */
+export async function deleteExpense(expenseId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const ownerId = await getCurrentUserId(supabase);
+  if (!ownerId) {
+    return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  }
+
+  const { data: deleted, error } = await supabase
+    .from("expenses")
+    .delete()
+    .eq("id", expenseId)
+    .select("id, description, amount, method, expense_date")
+    .maybeSingle();
+
+  if (error || !deleted) {
+    return { ok: false, error: safeError(error, "Saída não encontrada.") };
+  }
+
+  await logAudit(supabase, {
+    actorEmail: await getCurrentUserEmail(supabase),
+    ownerId,
+    action: "expense_deleted",
+    resourceType: "expense",
+    resourceId: expenseId,
+    metadata: {
+      description: deleted.description,
+      amount: deleted.amount,
+      method: deleted.method,
+      expenseDate: deleted.expense_date,
+    },
+  });
+  revalidatePath("/");
+  revalidatePath("/despesas");
   return { ok: true };
 }
 

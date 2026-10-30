@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { MinusIcon } from "lucide-react";
+import { MinusIcon, PencilIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -21,15 +21,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getBusinessToday } from "@/lib/date-utils";
-import { PAYMENT_METHOD_LABELS } from "@/lib/types";
+import { PAYMENT_METHOD_LABELS, type Expense } from "@/lib/types";
 import { expenseSchema, type ExpenseInput } from "@/lib/validations";
-import { registerExpense } from "@/app/actions";
+import { registerExpense, updateExpense } from "@/app/actions";
 
 const today = () => getBusinessToday();
 
-export function ExpenseDialog() {
+/** Sem `expense`: registra uma saída nova. Com `expense`: edita a existente. */
+export function ExpenseDialog({ expense }: { expense?: Expense } = {}) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const isEdit = Boolean(expense);
+  const initialValues: ExpenseInput = expense
+    ? {
+        description: expense.description,
+        category: expense.category ?? "",
+        amount: expense.amount,
+        method: expense.method,
+        expenseDate: expense.expense_date,
+        notes: expense.notes ?? "",
+      }
+    : ({ method: "dinheiro", expenseDate: today() } as ExpenseInput);
 
   const {
     register,
@@ -39,17 +51,14 @@ export function ExpenseDialog() {
     formState: { errors, isSubmitting },
   } = useForm<ExpenseInput>({
     resolver: zodResolver(expenseSchema),
-    defaultValues: {
-      method: "dinheiro",
-      expenseDate: today(),
-    },
+    defaultValues: initialValues,
   });
 
   const onSubmit = handleSubmit(async (data) => {
-    const result = await registerExpense(data);
+    const result = expense ? await updateExpense(expense.id, data) : await registerExpense(data);
     if (result.ok) {
-      toast.success("Saída registrada.");
-      reset({ method: "dinheiro", expenseDate: today() });
+      toast.success(isEdit ? "Saída atualizada." : "Saída registrada.");
+      reset(isEdit ? data : initialValues);
       setOpen(false);
       router.refresh();
     } else {
@@ -62,18 +71,25 @@ export function ExpenseDialog() {
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) reset({ method: "dinheiro", expenseDate: today() });
+        if (!next) reset(initialValues);
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="lg">
-          <MinusIcon />
-          Registrar saída
-        </Button>
+        {isEdit ? (
+          <Button type="button" variant="ghost" size="sm" className="text-muted-foreground">
+            <PencilIcon />
+            Editar
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" size="lg">
+            <MinusIcon />
+            Registrar saída
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Registrar saída</DialogTitle>
+          <DialogTitle>{isEdit ? "Editar saída" : "Registrar saída"}</DialogTitle>
           <DialogDescription>Combustível, compra de estoque, manutenção, despesa pessoal, etc.</DialogDescription>
         </DialogHeader>
 
@@ -129,7 +145,7 @@ export function ExpenseDialog() {
               Cancelar
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Salvando..." : "Salvar saída"}
+              {isSubmitting ? "Salvando..." : isEdit ? "Salvar alterações" : "Salvar saída"}
             </Button>
           </DialogFooter>
         </form>
