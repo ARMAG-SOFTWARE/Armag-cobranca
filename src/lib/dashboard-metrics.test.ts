@@ -61,6 +61,7 @@ function payment(overrides: Partial<Payment> = {}): Payment {
     created_at: "2026-02-01T12:00:00Z",
     is_settlement: false,
     settlement_previous_balance: null,
+    kind: "pagamento",
     ...overrides,
   };
 }

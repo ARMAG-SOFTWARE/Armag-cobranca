@@ -275,6 +275,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
           payments={payments}
           installmentNumberById={installmentNumberById}
           totalInstallments={contract.installments_count}
+          allowReversal={contract.status !== "cancelado"}
         />
       </div>
     </main>

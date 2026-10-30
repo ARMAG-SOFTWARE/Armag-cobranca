@@ -134,6 +134,8 @@ export interface Payment {
    * precisar de mais uma coluna para isso.
    */
   settlement_previous_balance: number | null;
+  /** "renovacao" = renovação de parcela (só juros, vencimento empurrado); nunca estornável. */
+  kind: "pagamento" | "renovacao";
 }
 
 /**

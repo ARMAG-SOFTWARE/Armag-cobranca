@@ -1260,6 +1260,79 @@ export async function payDownContractBalance(contractId: string, input: SettleCo
   return { ok: true, contractId: contract.id };
 }
 
+/**
+ * Estorna um pagamento lançado errado: devolve principal e juros à parcela,
+ * recalcula o status dela e apaga o pagamento, tudo numa única transação
+ * (`reverse_payment_atomic`, migration 0025). Só vale para o pagamento
+ * mais recente de uma parcela — nunca para entrada, quitação total ou
+ * renovação, cujo estado anterior não é recuperável com segurança.
+ */
+export async function reversePayment(paymentId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const ownerId = await getCurrentUserId(supabase);
+  if (!ownerId) {
+    return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  }
+
+  const { data: payment, error: paymentError } = await supabase
+    .from("payments")
+    .select("id, contract_id, installment_id, principal_amount, interest_amount, method, paid_at, contract:contracts(status, type)")
+    .eq("id", paymentId)
+    .single();
+  if (paymentError || !payment) {
+    return { ok: false, error: safeError(paymentError, "Pagamento não encontrado.") };
+  }
+  const contract = payment.contract as unknown as { status: ContractStatus; type: ContractType } | null;
+  if (contract?.status === "cancelado") {
+    return { ok: false, error: "Este contrato foi cancelado. Não é possível estornar pagamentos dele." };
+  }
+
+  const { error: rpcError } = await supabase
+    .rpc("reverse_payment_atomic", {
+      p_payment_id: paymentId,
+      p_owner_id: ownerId,
+      p_today: getBusinessToday(),
+    })
+    .single();
+
+  if (rpcError) {
+    const reasons: Record<string, string> = {
+      not_latest_payment: "Só é possível estornar o pagamento mais recente desta parcela. Estorne os mais novos antes.",
+      settlement_not_reversible: "Quitação total não pode ser estornada.",
+      down_payment_not_reversible: "Entrada não pode ser estornada.",
+      renewal_not_reversible: "Renovação de parcela não pode ser estornada.",
+      payment_not_found: "Pagamento não encontrado.",
+    };
+    const known = Object.keys(reasons).find((key) => rpcError.message?.includes(key));
+    return { ok: false, error: known ? reasons[known] : safeError(rpcError, "Erro ao estornar pagamento.") };
+  }
+
+  await recalculateContractStatus(supabase, payment.contract_id);
+
+  revalidatePath(`/contracts/${payment.contract_id}`);
+  revalidatePath("/");
+  revalidatePath("/clientes");
+  revalidatePath("/debtors");
+  if (contract?.type === "venda_iphone") {
+    revalidatePath("/phones");
+  }
+  await logAudit(supabase, {
+    actorEmail: await getCurrentUserEmail(supabase),
+    ownerId,
+    action: "payment_reversed",
+    resourceType: "installment",
+    resourceId: payment.installment_id ?? payment.contract_id,
+    metadata: {
+      paymentId,
+      principalAmount: payment.principal_amount,
+      interestAmount: payment.interest_amount,
+      method: payment.method,
+      paidAt: payment.paid_at,
+    },
+  });
+  return { ok: true, contractId: payment.contract_id };
+}
+
 export async function registerExpense(input: ExpenseInput): Promise<ActionResult> {
   const parsed = expenseSchema.safeParse(input);
   if (!parsed.success) {
