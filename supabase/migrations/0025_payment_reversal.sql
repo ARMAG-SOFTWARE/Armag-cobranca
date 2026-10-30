@@ -16,6 +16,13 @@ alter table payments add column if not exists kind text not null default 'pagame
 alter table payments drop constraint if exists payments_kind_check;
 alter table payments add constraint payments_kind_check check (kind in ('pagamento', 'renovacao'));
 
+-- Renovações feitas antes desta migration (pagamento só de juros, sem
+-- principal, numa parcela) passam a ser identificadas como tal — assim
+-- nunca são oferecidas para estorno.
+update payments set kind = 'renovacao'
+  where kind = 'pagamento' and installment_id is not null and is_settlement = false
+    and principal_amount = 0 and interest_amount > 0;
+
 create or replace function renew_installment_atomic(
   p_installment_id uuid,
   p_owner_id uuid,
