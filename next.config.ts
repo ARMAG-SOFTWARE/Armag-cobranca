@@ -41,6 +41,18 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // Endereços que as pessoas digitam/salvam por engano para a tela de login,
+  // e a antiga tela de Despesas (removida), levam ao lugar certo em vez de 404.
+  async redirects() {
+    return [
+      ...["/signIn", "/signin", "/sign-in", "/SignIn", "/entrar", "/auth/login"].map((source) => ({
+        source,
+        destination: "/login",
+        permanent: false,
+      })),
+      { source: "/despesas", destination: "/", permanent: false },
+    ];
+  },
   async headers() {
     if (process.env.NODE_ENV !== "production") return [];
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
