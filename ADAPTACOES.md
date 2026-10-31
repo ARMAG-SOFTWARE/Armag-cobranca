@@ -66,6 +66,12 @@ Trazida do Hipocred (mesma regra confirmada para este sistema), adaptada ao cód
 - Sem migration: as regras ficam no código; contratos já gravados mantêm o valor combinado.
 - Os scripts de dados fictícios (`supabase/seed-teste-usuario.sql`) seguem a mesma regra.
 
+### "Esqueci minha senha" retirado
+
+Como no Hipocred: saíram o link da tela de login, as telas `/esqueci-senha` e `/redefinir-senha`,
+a rota `/auth/confirm`, as ações de redefinição e os schemas; o proxy libera só `/login`. Troca de
+senha pelo Supabase → Authentication → Users. Para voltar, basta reverter o commit da remoção.
+
 ## Interface
 
 - Mesmas telas e navegação. Acréscimos pontuais: cartão "Regras de cobrança" em Configurações;

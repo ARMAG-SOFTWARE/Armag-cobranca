@@ -34,7 +34,7 @@ das diferenças em relação ao original está em [`ADAPTACOES.md`](./ADAPTACOES
 | Renovação de parcela | Paga só o juros de atraso pendente e empurra o vencimento 1 período (na diária, 1 dia de cobrança: de sábado vai para segunda); o principal continua em aberto. |
 | Estorno de pagamento | No histórico do contrato, "Estornar" desfaz o pagamento mais recente de uma parcela (valor volta a ficar em aberto). Entrada, quitação total e renovação não são estornáveis. |
 | Clientes encerrados | Aba "Encerrados" em Clientes com contratos quitados e cancelados. |
-| Esqueci minha senha | Link na tela de login; o usuário recebe um e-mail e cria a nova senha. |
+| Senha | Sem "Esqueci minha senha" por enquanto. A troca de senha é feita pela equipe, no Supabase → **Authentication → Users**. |
 | Editar periodicidade | Reencaixa só as datas das parcelas em aberto (parcelas com pagamento nunca mudam). O valor combinado do contrato não muda; em pods, a nova agenda ainda precisa caber em 4 semanas. |
 
 Todas as fórmulas ficam em `src/lib/financial-rules.ts` e são cobertas por
@@ -57,16 +57,11 @@ Todas as fórmulas ficam em `src/lib/financial-rules.ts` e são cobertas por
    em Redirect URLs.
 6. **Project Settings → API**: copie URL, `anon` key e `service_role` key para a Vercel (passo 2).
 
-### 1.1. E-mail de "Esqueci minha senha"
+### 1.1. Senha do usuário
 
-1. **Authentication → URL Configuration → Redirect URLs**: adicione
-   `https://SEU-DOMINIO/auth/confirm` (e o endereço `.vercel.app`, se usar).
-2. **Authentication → Emails → Reset Password**: troque o link do modelo para
-   `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/redefinir-senha`.
-   Assim o link funciona mesmo se aberto em outro aparelho. Sem essa troca, ele
-   só funciona no mesmo navegador em que a redefinição foi pedida.
-3. O envio de e-mail padrão do Supabase tem limite baixo (poucos e-mails por
-   hora). Para uso real, configure um SMTP próprio em **Authentication → Emails → SMTP Settings**.
+O "Esqueci minha senha" foi retirado por enquanto. Para trocar a senha de um usuário, use o
+Supabase → **Authentication → Users**. O fluxo antigo (tela, e-mail com `token_hash` e rota
+`/auth/confirm`) está no histórico do Git, no commit anterior à remoção, se precisar voltar.
 
 ### 2. Vercel (projeto novo, exclusivo deste sistema)
 

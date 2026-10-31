@@ -47,11 +47,7 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const isLoginRoute = pathname.startsWith("/login");
-  // Rotas abertas sem sessão: login, pedido de redefinição de senha e a
-  // confirmação do link do e-mail (que é justamente quem cria a sessão).
-  const isPublicRoute = isLoginRoute || pathname.startsWith("/esqueci-senha") || pathname.startsWith("/auth/");
-
-  if (!user && !isPublicRoute) {
+  if (!user && !isLoginRoute) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);
