@@ -55,7 +55,7 @@ refazendo a fórmula semanal (`storedContractMarkup` em `src/lib/financial-rules
 
 - Mesmas telas e navegação. Acréscimos pontuais: cartão "Regras de cobrança" em Configurações;
   campo de juros também na venda de produto; taxa de atraso exibida no contrato.
-- Identidade: nome provisório "ARMAG" e tema verde, centralizados em `src/lib/brand.ts`,
+- Identidade: nome "Crédito Rápido" e tema verde, centralizados em `src/lib/brand.ts`,
   `src/app/globals.css`, `public/manifest.json` e ícones em `public/`.
 - Textos de exemplo trocados de iPhone para pods. Nenhum campo removido.
 

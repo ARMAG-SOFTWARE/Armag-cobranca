@@ -1,5 +1,5 @@
 -- ============================================================
--- SEED DE HOMOLOGAÇÃO — ARMAGI Cobrança
+-- SEED DE HOMOLOGAÇÃO — Crédito Rápido
 -- ============================================================
 -- Dados 100% FICTÍCIOS para o ambiente de homologação isolado (NUNCA rodar
 -- em produção). Popula três contas independentes para os testes de

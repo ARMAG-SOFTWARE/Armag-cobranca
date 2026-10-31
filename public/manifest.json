@@ -1,6 +1,6 @@
 {
-  "name": "ARMAG — Gestão de Empréstimos e Vendas",
-  "short_name": "ARMAG",
+  "name": "Crédito Rápido — Gestão de Empréstimos e Vendas",
+  "short_name": "Crédito Rápido",
   "description": "Gerencie clientes, empréstimos e vendas de produtos parceladas com cobrança automática via WhatsApp.",
   "start_url": "/",
   "display": "standalone",

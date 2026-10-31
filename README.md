@@ -1,11 +1,11 @@
-# ARMAG Cobrança
+# Crédito Rápido
 
 Sistema web (PWA, mobile-first) para gestão de **empréstimos** e **venda parcelada de pods**, com
 controle de parcelas, pagamentos, quitação, despesas, painel financeiro, "Devedores do Dia" e
 cobrança pelo WhatsApp.
 
 Baseado no Recebe/Cobrança: **mesmas telas, menu, componentes e fluxos**. Mudam a identidade
-visual (tema verde, nome provisório "ARMAG") e as regras de negócio descritas abaixo. O histórico
+visual (tema verde, nome "Crédito Rápido"; sistema desenvolvido pela ARMAG) e as regras de negócio descritas abaixo. O histórico
 das diferenças em relação ao original está em [`ADAPTACOES.md`](./ADAPTACOES.md).
 
 > Este repositório, o banco Supabase, as credenciais e o domínio são **exclusivos** deste

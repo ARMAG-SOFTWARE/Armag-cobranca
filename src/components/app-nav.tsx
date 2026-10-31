@@ -90,7 +90,8 @@ function SidebarContent({ userEmail, pathname }: { userEmail: string | null; pat
       <Link href="/" className="flex items-center gap-2.5 px-1">
         <BrandMark />
         <div>
-          <div className="font-display text-lg leading-none font-bold tracking-[0.2em]">{BRAND.name}</div>
+          {/* Fonte e espaçamento um pouco menores para nomes longos caberem ao lado do logotipo. */}
+          <div className="font-display text-base leading-none font-bold tracking-[0.12em]">{BRAND.name}</div>
           <div className="mt-1 text-[8.5px] tracking-[0.15em] text-muted-foreground uppercase">
             {BRAND.tagline}
           </div>

@@ -5,9 +5,9 @@
  * TypeScript).
  */
 export const BRAND = {
-  /** Nome provisório até o cliente definir o definitivo. */
-  name: "ARMAG",
-  fullName: "ARMAG — Gestão de Empréstimos e Vendas",
+  /** Nome do sistema exibido em todas as telas (definido pelo cliente). */
+  name: "Crédito Rápido",
+  fullName: "Crédito Rápido — Gestão de Empréstimos e Vendas",
   tagline: "Cobrança sob controle",
   /** Verde da marca (mesmo valor de --primary em globals.css). */
   primaryColor: "#14b866",
