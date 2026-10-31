@@ -9,11 +9,26 @@ export interface GeneratedInstallment {
   due_date: string;
 }
 
+/** Cobrança diária: só de segunda a sábado — domingo nunca é dia de vencimento. */
+function skipSunday(date: Date): Date {
+  return date.getDay() === 0 ? addDays(date, 1) : date;
+}
+
+/** Avança `periods` dias de cobrança (segunda a sábado), partindo de `date` já sem domingo. */
+function addChargeDays(date: Date, periods: number): Date {
+  let result = skipSunday(date);
+  for (let i = 0; i < periods; i++) {
+    result = skipSunday(addDays(result, 1));
+  }
+  return result;
+}
+
 function addPeriod(date: Date, periodicity: Periodicity, periods: number) {
   switch (periodicity) {
     case "diaria":
-      // Todo dia corrido, inclusive fim de semana e feriado.
-      return addDays(date, periods);
+      // Segunda a sábado (feriado conta); um 1º vencimento no domingo vai
+      // para a segunda-feira seguinte.
+      return addChargeDays(date, periods);
     case "semanal":
       return addDays(date, periods * 7);
     case "quinzenal":
@@ -21,6 +36,14 @@ function addPeriod(date: Date, periodicity: Periodicity, periods: number) {
     case "mensal":
       return addMonths(date, periods);
   }
+}
+
+/**
+ * 1º vencimento efetivo do contrato: na diária, um domingo passa para a
+ * segunda-feira seguinte; nas demais periodicidades a data não muda.
+ */
+export function firstChargeDate(firstDueDate: string, periodicity: Periodicity): string {
+  return format(addPeriod(parseISO(firstDueDate), periodicity, 0), "yyyy-MM-dd");
 }
 
 /** Um período (na periodicidade dada) depois de `dueDate` — ex.: renovação de parcela, correção de periodicidade. */
@@ -69,7 +92,8 @@ export function reflowSchedule(
       continue;
     }
 
-    const computedDueDate: string = previousDueDate === null ? firstDueDate : nextDueDate(previousDueDate, periodicity);
+    const computedDueDate: string =
+      previousDueDate === null ? firstChargeDate(firstDueDate, periodicity) : nextDueDate(previousDueDate, periodicity);
 
     result.push({
       number: installment.number,
@@ -121,7 +145,7 @@ export function installmentPlanSpanDays(params: {
   periodicity: Periodicity;
   firstDueDate: string;
 }): number {
-  const firstDate = parseISO(params.firstDueDate);
+  const firstDate = parseISO(firstChargeDate(params.firstDueDate, params.periodicity));
   const lastDate = addPeriod(firstDate, params.periodicity, Math.max(params.installmentsCount - 1, 0));
   return Math.round((lastDate.getTime() - firstDate.getTime()) / 86_400_000);
 }

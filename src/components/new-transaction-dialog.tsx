@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { getBusinessToday } from "@/lib/date-utils";
-import { splitAmount } from "@/lib/installments";
+import { firstChargeDate, splitAmount } from "@/lib/installments";
 import {
   calculateFinancedAmount,
   contractDurationWeeks,
@@ -31,8 +31,9 @@ import {
   DEFAULT_LOAN_INTEREST_RATE_PERCENT,
   DEFAULT_PRODUCT_INTEREST_RATE_PERCENT,
   PRODUCT_SALE_MAX_WEEKS,
+  WEEKS_PER_INSTALLMENT,
 } from "@/lib/financial-rules";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import { PAYMENT_METHOD_LABELS } from "@/lib/types";
 import { transactionSchema, type TransactionInput } from "@/lib/validations";
 import { createTransaction } from "@/app/actions";
@@ -86,6 +87,9 @@ export function NewTransactionDialog() {
   const periodicity = watch("periodicity");
   const interestRatePercent = Number(watch("interestRatePercent")) || 0;
   const durationWeeks = contractDurationWeeks(installmentsCount, periodicity);
+  const firstDueDate = watch("firstDueDate");
+  const effectiveFirstDueDate =
+    firstDueDate && firstDueDate.length === 10 ? firstChargeDate(firstDueDate, periodicity) : firstDueDate;
 
   const { totalFinanced, markupAmount, ratePercent } =
     totalAmount > 0
@@ -371,6 +375,13 @@ export function NewTransactionDialog() {
             <Label htmlFor="firstDueDate">Data do 1º vencimento</Label>
             <Input id="firstDueDate" type="date" {...register("firstDueDate")} />
             {errors.firstDueDate && <p className="text-xs text-destructive">{errors.firstDueDate.message}</p>}
+            {!errors.firstDueDate && periodicity === "diaria" && (
+              <p className="text-xs text-muted-foreground">
+                Diária: de segunda a sábado (domingo não vence).
+                {effectiveFirstDueDate !== firstDueDate &&
+                  ` Como a data escolhida é domingo, o 1º vencimento será na segunda-feira, ${formatDate(effectiveFirstDueDate)}.`}
+              </p>
+            )}
           </div>
 
           <div className="grid gap-4 rounded-md border p-3 sm:grid-cols-2">
@@ -391,7 +402,7 @@ export function NewTransactionDialog() {
               )}
               <p className="text-xs text-muted-foreground">
                 {isLoan
-                  ? `Sugestão: 7,5% por semana (${formatWeeks(DEFAULT_LOAN_INTEREST_RATE_PERCENT / 7)}% por dia). Este parcelamento = ${formatWeeks(durationWeeks)} semana(s) → ${roundCents(interestRatePercent * durationWeeks)}%.`
+                  ? `Sugestão: 7,5% por semana (${formatWeeks(DEFAULT_LOAN_INTEREST_RATE_PERCENT * WEEKS_PER_INSTALLMENT.diaria)}% por parcela diária). Este parcelamento = ${formatWeeks(durationWeeks)} semana(s) → ${roundCents(interestRatePercent * durationWeeks)}%.`
                   : "Sugestão: 20%, aplicado uma única vez sobre o valor do produto (menos a entrada)."}
               </p>
             </div>

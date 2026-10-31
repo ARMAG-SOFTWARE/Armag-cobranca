@@ -4,7 +4,7 @@ import { addDays, format, parseISO } from "date-fns";
 import { createWhatsAppProvider } from "@/lib/whatsapp/providers";
 import { buildReminderTemplateParams, renderReminderMessage } from "@/lib/whatsapp/template";
 import { varyMessage } from "@/lib/whatsapp/spintax";
-import type { Client, Installment, MessageSettings } from "@/lib/types";
+import type { Client, Installment, MessageSettings, Periodicity } from "@/lib/types";
 
 export interface DispatchResult {
   ok: boolean;
@@ -21,6 +21,7 @@ interface WeeklyChargeWithRelations {
     principal_amount: number;
     installments_count: number;
     late_interest_rate_percent_per_day: number;
+    periodicity: Periodicity;
     client: Client;
     installments: Installment[];
   };
@@ -50,7 +51,7 @@ export async function dispatchWeeklyCharge(
   const { data, error } = await supabase
     .from("weekly_charges")
     .select(
-      "id, proximo_disparo, dispatch_count, contract:contracts(type, principal_amount, installments_count, late_interest_rate_percent_per_day, client:clients(*), installments(*))",
+      "id, proximo_disparo, dispatch_count, contract:contracts(type, principal_amount, installments_count, late_interest_rate_percent_per_day, periodicity, client:clients(*), installments(*))",
     )
     .eq("id", weeklyChargeId)
     .single();

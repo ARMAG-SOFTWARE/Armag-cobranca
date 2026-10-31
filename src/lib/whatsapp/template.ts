@@ -1,4 +1,4 @@
-import { calculateLateInterest, daysLate, roundCents } from "@/lib/financial-rules";
+import { calculateLateInterest, chargeableLateDays, roundCents } from "@/lib/financial-rules";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { Client, Contract, Installment } from "@/lib/types";
 
@@ -18,7 +18,7 @@ import type { Client, Contract, Installment } from "@/lib/types";
 export function renderReminderMessage(
   template: string,
   client: Pick<Client, "name">,
-  contract: Pick<Contract, "type" | "principal_amount" | "late_interest_rate_percent_per_day">,
+  contract: Pick<Contract, "type" | "principal_amount" | "late_interest_rate_percent_per_day" | "periodicity">,
   installment: Pick<
     Installment,
     "number" | "amount" | "due_date" | "status" | "paid_principal_amount" | "paid_interest_amount"
@@ -29,6 +29,7 @@ export function renderReminderMessage(
   const lateInterestOwed = calculateLateInterest({
     lateInterestRatePercentPerDay: contract.late_interest_rate_percent_per_day,
     originalPrincipalAmount: contract.principal_amount,
+    periodicity: contract.periodicity,
     dueDate: installment.due_date,
     status: installment.status,
     paidInterestAmount: installment.paid_interest_amount,
@@ -40,7 +41,7 @@ export function renderReminderMessage(
     .replaceAll("{numero_parcela}", `${installment.number}/${installmentsCount}`)
     .replaceAll("{valor}", formatCurrency(installment.amount).replace("R$", "").trim())
     .replaceAll("{data_vencimento}", formatDate(installment.due_date))
-    .replaceAll("{dias_atraso}", String(daysLate(installment.due_date)))
+    .replaceAll("{dias_atraso}", String(chargeableLateDays(installment.due_date, contract.periodicity)))
     .replaceAll("{juros_dia}", formatCurrency(lateInterestOwed).replace("R$", "").trim())
     .replaceAll("{valor_atualizado}", formatCurrency(totalDueNow).replace("R$", "").trim());
 }

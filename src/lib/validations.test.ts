@@ -78,7 +78,7 @@ describe("transactionSchema — venda de produto (pods) em até 4 semanas", () =
   };
 
   it.each([
-    [28, "diaria"],
+    [24, "diaria"],
     [4, "semanal"],
     [2, "quinzenal"],
     [1, "mensal"],
@@ -87,7 +87,7 @@ describe("transactionSchema — venda de produto (pods) em até 4 semanas", () =
   });
 
   it.each([
-    [29, "diaria"],
+    [25, "diaria"],
     [5, "semanal"],
     [3, "quinzenal"],
     [2, "mensal"],

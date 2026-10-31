@@ -3,6 +3,7 @@ import {
   allocateSettlement,
   calculateFinancedAmount,
   calculateLateInterest,
+  chargeableLateDays,
   daysLate,
   roundCents,
   splitPayment,
@@ -34,10 +35,41 @@ describe("daysLate", () => {
   });
 });
 
+describe("chargeableLateDays", () => {
+  // REF = quarta-feira, 2026-01-21.
+  it("diária: domingo não conta como dia de atraso", () => {
+    // Venceu sexta 16/01: sáb 17, (dom 18), seg 19, ter 20, qua 21 = 4 dias.
+    expect(chargeableLateDays("2026-01-16", "diaria", REF)).toBe(4);
+    expect(daysLate("2026-01-16", REF)).toBe(5);
+  });
+
+  it("diária: venceu no sábado e hoje é domingo = 0 dia de atraso", () => {
+    expect(chargeableLateDays("2026-01-17", "diaria", new Date("2026-01-18T15:00:00Z"))).toBe(0);
+    expect(chargeableLateDays("2026-01-17", "diaria", new Date("2026-01-19T15:00:00Z"))).toBe(1);
+  });
+
+  it("diária: desconta um domingo por semana em atrasos longos", () => {
+    // Segunda 05/01 até quarta 21/01: 16 dias corridos, 2 domingos (11 e 18).
+    expect(chargeableLateDays("2026-01-05", "diaria", REF)).toBe(14);
+  });
+
+  it("demais periodicidades contam todos os dias corridos, inclusive domingo", () => {
+    for (const periodicity of ["semanal", "quinzenal", "mensal"] as const) {
+      expect(chargeableLateDays("2026-01-16", periodicity, REF)).toBe(5);
+    }
+  });
+
+  it("nunca é negativo nem conta antes do vencimento", () => {
+    expect(chargeableLateDays("2026-01-21", "diaria", REF)).toBe(0);
+    expect(chargeableLateDays("2026-02-01", "diaria", REF)).toBe(0);
+  });
+});
+
 describe("calculateLateInterest", () => {
   const base = {
     lateInterestRatePercentPerDay: 1,
     originalPrincipalAmount: 1000,
+    periodicity: "semanal" as const,
     status: "atrasado" as const,
     paidInterestAmount: 0,
   };
@@ -71,6 +103,13 @@ describe("calculateLateInterest", () => {
       REF,
     );
     expect(result).toBe(3);
+  });
+
+  it("diária: o juros de atraso não corre no domingo", () => {
+    // Venceu sexta 16/01: 4 dias cobráveis (sem o domingo) x 1% x R$1000 = R$40.
+    expect(calculateLateInterest({ ...base, periodicity: "diaria", dueDate: "2026-01-16" }, REF)).toBe(40);
+    // Mesmo vencimento num contrato semanal: 5 dias corridos = R$50.
+    expect(calculateLateInterest({ ...base, dueDate: "2026-01-16" }, REF)).toBe(50);
   });
 
   it("cenário 6: parcela já totalmente paga nunca gera juros", () => {
@@ -129,22 +168,28 @@ describe("calculateFinancedAmount", () => {
   it.each([
     // [parcelas, periodicidade, % total, total financiado]
     [4, "semanal", 30, 1300],
-    [28, "diaria", 30, 1300],
+    [24, "diaria", 30, 1300],
     [2, "quinzenal", 30, 1300],
     [1, "mensal", 30, 1300],
     [3, "mensal", 90, 1900],
-    [7, "diaria", 7.5, 1075],
+    [6, "diaria", 7.5, 1075],
   ] as const)("empréstimo: 7,5%%/semana com %i parcela(s) %s = %d%%", (count, periodicity, ratePercent, total) => {
     const result = calculateFinancedAmount({ ...loan, installmentsCount: count, periodicity });
     expect(result.ratePercent).toBe(ratePercent);
     expect(result.totalFinanced).toBe(total);
   });
 
-  it("empréstimo diário proporcional: 10 diárias = 7,5% ÷ 7 × 10, sem arredondar a taxa antes", () => {
+  it("empréstimo diário proporcional: 10 diárias = 7,5% ÷ 6 × 10, sem arredondar a taxa antes", () => {
     const result = calculateFinancedAmount({ ...loan, installmentsCount: 10, periodicity: "diaria" });
-    expect(result.ratePercent).toBe(10.71);
-    expect(result.markupAmount).toBe(107.14);
-    expect(result.totalFinanced).toBe(1107.14);
+    expect(result.ratePercent).toBe(12.5);
+    expect(result.markupAmount).toBe(125);
+    expect(result.totalFinanced).toBe(1125);
+  });
+
+  it("empréstimo diário: 7 diárias = 7,5% ÷ 6 × 7, sem arredondar a taxa antes", () => {
+    const result = calculateFinancedAmount({ ...loan, installmentsCount: 7, periodicity: "diaria" });
+    expect(result.ratePercent).toBe(8.75);
+    expect(result.totalFinanced).toBe(1087.5);
   });
 
   it("empréstimo: a taxa semanal é editável", () => {
@@ -155,7 +200,7 @@ describe("calculateFinancedAmount", () => {
   it("venda de produto (pods): juros fixo, independente de parcelas e periodicidade", () => {
     for (const [installmentsCount, periodicity] of [
       [4, "semanal"],
-      [28, "diaria"],
+      [24, "diaria"],
       [1, "mensal"],
     ] as const) {
       const result = calculateFinancedAmount({

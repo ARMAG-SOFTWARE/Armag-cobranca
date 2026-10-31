@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { calculateLateInterest, roundCents } from "@/lib/financial-rules";
-import { PAYMENT_METHOD_LABELS, type Installment } from "@/lib/types";
+import { PAYMENT_METHOD_LABELS, type Installment, type Periodicity } from "@/lib/types";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import { paymentSchema, type PaymentInput } from "@/lib/validations";
 import { registerPayment } from "@/app/actions";
@@ -47,6 +47,7 @@ export function RegisterPaymentDialog({
   installment,
   lateInterestRatePercentPerDay,
   contractPrincipalAmount,
+  contractPeriodicity,
   triggerLabel = "Registrar pagamento",
   clientName,
   onPaid,
@@ -57,6 +58,8 @@ export function RegisterPaymentDialog({
   lateInterestRatePercentPerDay: number;
   /** Valor originalmente emprestado no contrato — base do juros de atraso (nunca o valor da parcela). */
   contractPrincipalAmount: number;
+  /** Periodicidade do contrato — na diária, domingo não conta como dia de atraso. */
+  contractPeriodicity: Periodicity;
   triggerLabel?: string;
   /** Exibido no diálogo de confirmação — útil em telas que listam vários clientes (Devedores do Dia). */
   clientName?: string;
@@ -71,11 +74,12 @@ export function RegisterPaymentDialog({
       calculateLateInterest({
         lateInterestRatePercentPerDay,
         originalPrincipalAmount: contractPrincipalAmount,
+        periodicity: contractPeriodicity,
         dueDate: installment.due_date,
         status: installment.status,
         paidInterestAmount: installment.paid_interest_amount,
       }),
-    [lateInterestRatePercentPerDay, contractPrincipalAmount, installment.due_date, installment.status, installment.paid_interest_amount],
+    [lateInterestRatePercentPerDay, contractPrincipalAmount, contractPeriodicity, installment.due_date, installment.status, installment.paid_interest_amount],
   );
   const totalDue = roundCents(outstandingPrincipal + interestOwed);
 

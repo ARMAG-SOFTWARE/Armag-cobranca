@@ -19,7 +19,8 @@
 --   - Recusa rodar duas vezes no mesmo usuário (evita duplicar).
 --
 -- Regras usadas (as mesmas do sistema): empréstimo = taxa semanal × duração
--- em semanas (diária 1/7, semanal 1, quinzenal 2, mensal 4); pod = taxa
+-- em semanas (diária 1/6 — cobrança de segunda a sábado —, semanal 1,
+-- quinzenal 2, mensal 4); parcelas diárias pulam o domingo; pod = taxa
 -- fixa sobre (valor − entrada); última parcela absorve os centavos;
 -- juros de atraso % ao dia sobre o valor do contrato.
 -- ============================================================
@@ -54,7 +55,7 @@ declare
   v_contracts jsonb := '[
     [1, "emprestimo", "Capital de giro",            1000, 0, 4,  "semanal",  -21, 7.5, 1,   2, 0,   false, "pix",      null],
     [2, "emprestimo", "Reforma",                    2000, 0, 3,  "mensal",   -40, 7.5, 1,   1, 0,   true,  "pix",      null],
-    [3, "emprestimo", "Emergência",                  500, 0, 28, "diaria",   -10, 7.5, 1,   8, 0,   false, "dinheiro", null],
+    [3, "emprestimo", "Emergência",                  500, 0, 24, "diaria",   -10, 7.5, 1,   8, 0,   false, "dinheiro", null],
     [4, "emprestimo", "Compra de mercadoria",       1500, 0, 2,  "quinzenal",  5, 7.5, 1,   0, 300, false, "pix",      null],
     [5, "emprestimo", "Pagamento de contas",         800, 0, 4,  "semanal",  -35, 7.5, 1.5, 2, 150, false, "dinheiro", null],
     [6, "emprestimo", "Viagem",                     1200, 0, 2,  "mensal",   -50, 7.5, 1,   2, 0,   false, "pix",      null],
@@ -63,7 +64,7 @@ declare
     [9, "emprestimo", "Cadastrado por engano",       600, 0, 4,  "semanal",  -14, 7.5, 1,   1, 0,   false, "dinheiro", "cancelado"],
     [10, "venda_iphone", "Pod descartável menta",    100, 0, 4,  "semanal",  -14, 20,  1,   2, 0,   false, "pix",      null],
     [11, "venda_iphone", "Kit pods sabores",          300, 60, 2, "quinzenal", -3, 20,  1,   0, 0,   false, "dinheiro", null],
-    [12, "venda_iphone", "Pod recarregável",          150, 0, 28, "diaria",   -5, 20,  1,   4, 0,   false, "pix",      null],
+    [12, "venda_iphone", "Pod recarregável",          150, 0, 24, "diaria",   -5, 20,  1,   4, 0,   false, "pix",      null],
     [1, "venda_iphone", "Pod descartável uva",        80, 0, 1,  "mensal",    10, 20,  1,   0, 0,   false, "pix",      null],
     [5, "venda_iphone", "Pods (2 unidades)",         200, 0, 4,  "semanal",  -28, 20,  1,   4, 0,   false, "dinheiro", null],
     [3, "emprestimo", "Segundo empréstimo",          400, 0, 2,  "semanal",    0, 7.5, 1,   0, 0,   false, "pix",      null]
@@ -80,7 +81,7 @@ declare
   v_weeks numeric; v_base numeric; v_total numeric; v_cents bigint; v_base_cents bigint; v_rem bigint;
   v_amount numeric; v_due date; v_status text; v_paid_principal numeric; v_paid_interest numeric;
   v_paid_at timestamptz; v_interest numeric; v_any_late boolean; v_all_paid boolean; v_contract_status text;
-  v_balance numeric; v_received numeric; v_apply numeric; v_inst record; v_wd int;
+  v_balance numeric; v_received numeric; v_apply numeric; v_inst record; v_wd int; v_prev_due date;
   i int;
 begin
   select id into v_owner from auth.users where lower(email) = lower(v_email);
@@ -108,12 +109,16 @@ begin
     v_principal := (v_c->>3)::numeric; v_down := (v_c->>4)::numeric;
     v_count := (v_c->>5)::int; v_period := v_c->>6;
     v_first := v_today + (v_c->>7)::int;
+    -- Diária: 1º vencimento no domingo passa para a segunda-feira.
+    if v_period = 'diaria' and extract(isodow from v_first) = 7 then
+      v_first := v_first + 1;
+    end if;
     v_rate := (v_c->>8)::numeric; v_late := (v_c->>9)::numeric;
     v_paid_full := (v_c->>10)::int; v_partial := (v_c->>11)::numeric;
     v_late_paid := (v_c->>12)::boolean; v_method := v_c->>13; v_special := v_c->>14;
 
     -- Juros contratual (mesma regra de calculateFinancedAmount)
-    v_weeks := case v_period when 'diaria' then 1.0/7 when 'semanal' then 1 when 'quinzenal' then 2 else 4 end;
+    v_weeks := case v_period when 'diaria' then 1.0/6 when 'semanal' then 1 when 'quinzenal' then 2 else 4 end;
     v_base := round(v_principal - v_down, 2);
     v_total := case when v_type = 'emprestimo'
       then round(v_base + round(v_base * (v_count * v_weeks * v_rate) / 100, 2), 2)
@@ -135,10 +140,13 @@ begin
     for i in 1..v_count loop
       v_amount := (v_base_cents + case when i = v_count then v_rem else 0 end) / 100.0;
       v_due := case v_period
-        when 'diaria' then v_first + (i - 1)
+        when 'diaria' then case when i = 1 then v_first
+          when extract(isodow from v_prev_due + 1) = 7 then v_prev_due + 2
+          else v_prev_due + 1 end
         when 'semanal' then v_first + (i - 1) * 7
         when 'quinzenal' then v_first + (i - 1) * 15
         else (v_first + make_interval(months => i - 1))::date end;
+      v_prev_due := v_due;
       v_paid_principal := 0; v_paid_interest := 0; v_paid_at := null; v_interest := 0;
 
       if v_special is null or v_special = 'cancelado' then

@@ -171,7 +171,7 @@ describe("buildConsolidatedWhatsAppReminderLink", () => {
 
 describe("buildWhatsAppReminderLink (lembrete de parcela única)", () => {
   const client = { phone: "11999998888" };
-  const contract = { type: "emprestimo" as const, principal_amount: 1000, installments_count: 4, late_interest_rate_percent_per_day: 1 };
+  const contract = { type: "emprestimo" as const, principal_amount: 1000, installments_count: 4, late_interest_rate_percent_per_day: 1, periodicity: "semanal" as const };
 
   it("telefone inválido retorna erro", () => {
     const result = buildWhatsAppReminderLink(
@@ -221,7 +221,7 @@ describe("buildWhatsAppChatUrl", () => {
   it("o link de cobrança respeita o modo escolhido", () => {
     const result = buildWhatsAppReminderLink(
       { phone: "11999990000" },
-      { type: "emprestimo", principal_amount: 1000, installments_count: 4, late_interest_rate_percent_per_day: 1 },
+      { type: "emprestimo", principal_amount: 1000, installments_count: 4, late_interest_rate_percent_per_day: 1, periodicity: "semanal" },
       { number: 1, amount: 375, due_date: "2099-12-31", status: "pendente", paid_principal_amount: 0, paid_interest_amount: 0 },
       "business_android",
     );

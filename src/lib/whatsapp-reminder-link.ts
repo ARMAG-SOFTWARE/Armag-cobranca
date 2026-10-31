@@ -1,4 +1,4 @@
-import { calculateLateInterest, daysLate, roundCents } from "@/lib/financial-rules";
+import { calculateLateInterest, chargeableLateDays, roundCents } from "@/lib/financial-rules";
 import { getBusinessToday } from "@/lib/date-utils";
 import { formatCurrency, formatDate, toWhatsAppDigits } from "@/lib/utils";
 import type { Client, Contract, Installment, WhatsAppOpenMode } from "@/lib/types";
@@ -8,7 +8,7 @@ export type ReminderLinkResult = { ok: true; url: string } | { ok: false; error:
 
 type ReminderContract = Pick<
   Contract,
-  "type" | "principal_amount" | "installments_count" | "late_interest_rate_percent_per_day"
+  "type" | "principal_amount" | "installments_count" | "late_interest_rate_percent_per_day" | "periodicity"
 >;
 
 type ReminderInstallment = Pick<
@@ -51,6 +51,7 @@ export function buildWhatsAppReminderLink(
   const lateInterestOwed = calculateLateInterest({
     lateInterestRatePercentPerDay: contract.late_interest_rate_percent_per_day,
     originalPrincipalAmount: contract.principal_amount,
+    periodicity: contract.periodicity,
     dueDate: installment.due_date,
     status: installment.status,
     paidInterestAmount: installment.paid_interest_amount,
@@ -72,7 +73,7 @@ export function buildWhatsAppReminderLink(
   lines.push(`Valor da parcela: ${formatCurrency(installment.amount)}`);
 
   if (isOverdue) {
-    lines.push(`Dias de atraso: ${daysLate(installment.due_date)}`);
+    lines.push(`Dias de atraso: ${chargeableLateDays(installment.due_date, contract.periodicity)}`);
     lines.push(`Juros do dia: ${formatCurrency(lateInterestOwed)}`);
   }
 

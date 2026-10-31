@@ -23,15 +23,15 @@ das diferenças em relação ao original está em [`ADAPTACOES.md`](./ADAPTACOES
 
 | Regra | Como funciona |
 |---|---|
-| Juros do empréstimo | Taxa **por semana**, editável no cadastro (sugestão 7,5%). Total = taxa × duração em semanas: diária = 1/7 de semana por parcela (7,5% ÷ 7 ao dia), semanal = 1, quinzenal = 2, mensal = 4. Ex.: R$ 1.000 em 4 semanais, 28 diárias, 2 quinzenais ou 1 mensal = R$ 1.300. Aplicado uma única vez e dividido igualmente entre as parcelas. |
+| Juros do empréstimo | Taxa **por semana**, editável no cadastro (sugestão 7,5%). Total = taxa × duração em semanas: diária = 1/6 de semana por parcela (cobrança de segunda a sábado: 7,5% ÷ 6 por parcela), semanal = 1, quinzenal = 2, mensal = 4. Ex.: R$ 1.000 em 4 semanais, 24 diárias, 2 quinzenais ou 1 mensal = R$ 1.300. Aplicado uma única vez e dividido igualmente entre as parcelas. |
 | Juros da venda de pods | Fixo, editável no cadastro (sugestão 20%), sobre o valor do produto menos a entrada. Não depende do número de parcelas. |
-| Prazo dos pods | Todas as parcelas devem vencer em **até 4 semanas a partir do 1º vencimento** (máx. 28 diárias, 4 semanais, 2 quinzenais ou 1 mensal). Empréstimo não tem esse limite. |
-| Periodicidades | Diária (todo dia, inclusive fim de semana e feriado), semanal, quinzenal e mensal. |
-| Juros de atraso | % **ao dia** sobre o valor total do contrato, para empréstimos e pods. O padrão fica em **Configurações → Regras de cobrança** (inicial: 1%) e é **copiado para cada contrato no cadastro**: mudar a configuração não altera contratos existentes. |
+| Prazo dos pods | Todas as parcelas devem vencer em **até 4 semanas a partir do 1º vencimento** (máx. 24 diárias, 4 semanais, 2 quinzenais ou 1 mensal). Empréstimo não tem esse limite. |
+| Periodicidades | Diária (**de segunda a sábado**; domingo não vence e, se escolhido como 1º vencimento, passa para a segunda; feriado conta), semanal, quinzenal e mensal. |
+| Juros de atraso | % **ao dia** sobre o valor total do contrato, para empréstimos e pods. O padrão fica em **Configurações → Regras de cobrança** (inicial: 1%) e é **copiado para cada contrato no cadastro**: mudar a configuração não altera contratos existentes. Na **diária**, o domingo não conta como dia de atraso; nas demais periodicidades contam todos os dias. |
 | Cobrança pelo WhatsApp | Manual: o botão abre a conversa com a mensagem pronta. Em **Configurações → Regras de cobrança** escolha como abrir: padrão (`wa.me`), **WhatsApp Business no Android** (abre sempre o app Business, nunca o pessoal) ou **WhatsApp Web** (para iPhone/iPad, com o navegador logado na conta Business). No iPhone/iPad não é possível escolher o app pelo link. |
 | Campos do produto | Cor, bateria e IMEI continuam disponíveis e opcionais. |
 | Abatimento parcial | Um valor recebido de uma vez é aplicado nas parcelas em aberto, da mais antiga para a mais nova, sem perdoar nada (diferente da quitação total, que encerra a dívida). |
-| Renovação de parcela | Paga só o juros de atraso pendente e empurra o vencimento 1 período (inclusive 1 dia, na diária); o principal continua em aberto. |
+| Renovação de parcela | Paga só o juros de atraso pendente e empurra o vencimento 1 período (na diária, 1 dia de cobrança: de sábado vai para segunda); o principal continua em aberto. |
 | Estorno de pagamento | No histórico do contrato, "Estornar" desfaz o pagamento mais recente de uma parcela (valor volta a ficar em aberto). Entrada, quitação total e renovação não são estornáveis. |
 | Clientes encerrados | Aba "Encerrados" em Clientes com contratos quitados e cancelados. |
 | Esqueci minha senha | Link na tela de login; o usuário recebe um e-mail e cria a nova senha. |

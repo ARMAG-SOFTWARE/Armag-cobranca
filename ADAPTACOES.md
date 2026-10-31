@@ -21,8 +21,8 @@ Para conferir qualquer diferença: `git diff <primeiro-commit> -- <arquivo>`.
 
 | Item | Original | Este sistema |
 |---|---|---|
-| Juros do empréstimo | % por **parcela** × nº de parcelas | % por **semana** × duração em semanas (diária = 1/7, semanal = 1, quinzenal = 2, mensal = 4) |
-| Periodicidades | semanal, quinzenal, mensal | **+ diária** |
+| Juros do empréstimo | % por **parcela** × nº de parcelas | % por **semana** × duração em semanas (diária = 1/6, semanal = 1, quinzenal = 2, mensal = 4) |
+| Periodicidades | semanal, quinzenal, mensal | **+ diária** (segunda a sábado) |
 | Juros da venda de produto | nenhum | fixo editável, sugestão 20% |
 | Prazo da venda de produto | livre | até 4 semanas a partir do 1º vencimento |
 | Juros de atraso | 1%/dia fixo no código, só empréstimo | taxa em Configurações, **gravada em cada contrato**, empréstimo e produto |
@@ -50,6 +50,21 @@ Migrations renumeradas para `0023_contract_abatement.sql` e `0024_installment_re
 Como a periodicidade pode ser corrigida depois do cadastro, o juros exibido no painel e no
 contrato passou a ser calculado a partir do valor salvo (total financiado − base), e não
 refazendo a fórmula semanal (`storedContractMarkup` em `src/lib/financial-rules.ts`).
+
+### Cobrança diária de segunda a sábado
+
+Trazida do Hipocred (mesma regra confirmada para este sistema), adaptada ao código do Crédito Rápido:
+
+- Parcelas diárias vencem só de segunda a sábado (feriado conta); um 1º vencimento no domingo vai
+  para a segunda-feira seguinte, com aviso no cadastro. Renovação e correção de periodicidade
+  também pulam o domingo (`src/lib/installments.ts`).
+- Juros do empréstimo diário: 1/6 da taxa semanal por parcela (6 diárias = 1 semana). Ex.: 24
+  diárias a 7,5%/semana = 30%. Pods diários: no máximo 24 parcelas em 4 semanas.
+- Juros de atraso: na diária o domingo não conta como dia de atraso (`chargeableLateDays` em
+  `src/lib/financial-rules.ts`), em todos os pontos que calculam juros e nos "dias de atraso"
+  exibidos; nas outras periodicidades nada muda.
+- Sem migration: as regras ficam no código; contratos já gravados mantêm o valor combinado.
+- Os scripts de dados fictícios (`supabase/seed-teste-usuario.sql`) seguem a mesma regra.
 
 ## Interface
 

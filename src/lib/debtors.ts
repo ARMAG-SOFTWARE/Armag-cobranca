@@ -1,5 +1,5 @@
 import { businessDayRangeUTC, getBusinessToday } from "@/lib/date-utils";
-import { calculateLateInterest, daysLate, roundCents } from "@/lib/financial-rules";
+import { calculateLateInterest, chargeableLateDays, roundCents } from "@/lib/financial-rules";
 import type { createClient } from "@/lib/supabase/server";
 import type { Client, Contract, Installment } from "@/lib/types";
 
@@ -170,11 +170,12 @@ export async function getTodayDebtors(
     const interestOwed = calculateLateInterest({
       lateInterestRatePercentPerDay: installment.contract.late_interest_rate_percent_per_day,
       originalPrincipalAmount: installment.contract.principal_amount,
+      periodicity: installment.contract.periodicity,
       dueDate: installment.due_date,
       status: installment.status,
       paidInterestAmount: installment.paid_interest_amount,
     });
-    const late = daysLate(installment.due_date, now);
+    const late = chargeableLateDays(installment.due_date, installment.contract.periodicity, now);
     const isOverdue = late > 0;
     const isDueToday = installment.due_date === todayStr;
     const totalDue = roundCents(outstandingPrincipal + interestOwed);

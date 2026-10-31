@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createWhatsAppProvider } from "@/lib/whatsapp/providers";
 import { buildReminderTemplateParams, renderReminderMessage } from "@/lib/whatsapp/template";
+import type { Periodicity } from "@/lib/types";
 
 export interface SendReminderResult {
   ok: boolean;
@@ -33,6 +34,7 @@ export async function sendCollectionReminder(
     principal_amount: number;
     installments_count: number;
     late_interest_rate_percent_per_day: number;
+    periodicity: Periodicity;
     client: { id: string; name: string; phone: string };
   };
   const client = contract.client;

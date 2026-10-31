@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit-log";
 import { getBusinessToday } from "@/lib/date-utils";
 import { detectSafeDocumentType } from "@/lib/file-validation";
-import { generateInstallments, nextDueDate, reflowSchedule } from "@/lib/installments";
+import { firstChargeDate, generateInstallments, nextDueDate, reflowSchedule } from "@/lib/installments";
 import { normalizeImei } from "@/lib/imei";
 import { sendCollectionReminder } from "@/lib/whatsapp";
 import {
@@ -162,6 +162,8 @@ export async function createTransaction(input: TransactionInput): Promise<Action
   }
 
   const hasDownPayment = data.type === "venda_iphone" && data.hasDownPayment;
+  // Diária: um 1º vencimento no domingo passa para a segunda-feira seguinte.
+  const firstDueDate = firstChargeDate(data.firstDueDate, data.periodicity);
   // Empréstimo: % por semana; venda de produto: % fixo (obrigatório para
   // os dois tipos, garantido pelo refine do schema).
   const interestRatePercent = data.interestRatePercent!;
@@ -205,7 +207,7 @@ export async function createTransaction(input: TransactionInput): Promise<Action
       total_amount: totalFinanced,
       installments_count: data.installmentsCount,
       periodicity: data.periodicity,
-      first_due_date: data.firstDueDate,
+      first_due_date: firstDueDate,
       status: "ativo",
       interest_rate_percent: interestRatePercent,
       late_interest_rate_percent_per_day: lateInterestRatePercentPerDay,
@@ -222,7 +224,7 @@ export async function createTransaction(input: TransactionInput): Promise<Action
     totalAmount: totalFinanced,
     installmentsCount: data.installmentsCount,
     periodicity: data.periodicity,
-    firstDueDate: data.firstDueDate,
+    firstDueDate,
   }).map((installment) => ({
     owner_id: ownerId,
     contract_id: contract.id,
@@ -522,6 +524,7 @@ export async function registerPayment(input: PaymentInput): Promise<ActionResult
       type: ContractType;
       principal_amount: number;
       late_interest_rate_percent_per_day: number;
+      periodicity: Periodicity;
       status: ContractStatus;
     } | null;
   };
@@ -533,7 +536,7 @@ export async function registerPayment(input: PaymentInput): Promise<ActionResult
     supabase
       .from("installments")
       .select(
-        "id, contract_id, amount, paid_principal_amount, paid_interest_amount, due_date, status, contract:contracts(client_id, type, principal_amount, late_interest_rate_percent_per_day, status)",
+        "id, contract_id, amount, paid_principal_amount, paid_interest_amount, due_date, status, contract:contracts(client_id, type, principal_amount, late_interest_rate_percent_per_day, periodicity, status)",
       )
       .eq("id", data.installmentId)
       .single(),
@@ -574,6 +577,7 @@ export async function registerPayment(input: PaymentInput): Promise<ActionResult
   const interestOwed = calculateLateInterest({
     lateInterestRatePercentPerDay: contract.late_interest_rate_percent_per_day,
     originalPrincipalAmount: contract.principal_amount,
+    periodicity: contract.periodicity,
     dueDate: installment.due_date,
     status: installment.status,
     paidInterestAmount: installment.paid_interest_amount,
@@ -762,6 +766,7 @@ export async function renewInstallment(installmentId: string, input: RenewInstal
   const interestOwed = calculateLateInterest({
     lateInterestRatePercentPerDay: contract.late_interest_rate_percent_per_day,
     originalPrincipalAmount: contract.principal_amount,
+    periodicity: contract.periodicity,
     dueDate: installment.due_date,
     status: installment.status,
     paidInterestAmount: installment.paid_interest_amount,
@@ -862,6 +867,7 @@ type SettlementContractRow = {
   status: ContractStatus;
   principal_amount: number;
   late_interest_rate_percent_per_day: number;
+  periodicity: Periodicity;
   client: { name: string } | null;
   installments: {
     id: string;
@@ -875,7 +881,7 @@ type SettlementContractRow = {
 };
 
 function buildSettlementInstallmentInputs(
-  contract: Pick<SettlementContractRow, "late_interest_rate_percent_per_day" | "principal_amount" | "installments">,
+  contract: Pick<SettlementContractRow, "late_interest_rate_percent_per_day" | "principal_amount" | "periodicity" | "installments">,
 ): { remaining: SettlementContractRow["installments"]; settlementInput: SettlementInstallmentInput[] } {
   const remaining = contract.installments.filter((installment) => installment.status !== "pago");
   const settlementInput: SettlementInstallmentInput[] = remaining.map((installment) => ({
@@ -885,6 +891,7 @@ function buildSettlementInstallmentInputs(
     interestOwed: calculateLateInterest({
       lateInterestRatePercentPerDay: contract.late_interest_rate_percent_per_day,
       originalPrincipalAmount: contract.principal_amount,
+      periodicity: contract.periodicity,
       dueDate: installment.due_date,
       status: installment.status,
       paidInterestAmount: installment.paid_interest_amount,
@@ -908,7 +915,7 @@ export async function getContractSettlementSummary(
     supabase
       .from("contracts")
       .select(
-        "id, owner_id, client_id, type, status, principal_amount, late_interest_rate_percent_per_day, client:clients(name), installments(id, number, amount, due_date, status, paid_principal_amount, paid_interest_amount)",
+        "id, owner_id, client_id, type, status, principal_amount, late_interest_rate_percent_per_day, periodicity, client:clients(name), installments(id, number, amount, due_date, status, paid_principal_amount, paid_interest_amount)",
       )
       .eq("id", contractId)
       .single(),
@@ -975,7 +982,7 @@ export async function settleContract(contractId: string, input: SettleContractIn
     supabase
       .from("contracts")
       .select(
-        "id, owner_id, client_id, type, status, principal_amount, late_interest_rate_percent_per_day, client:clients(name), installments(id, number, amount, due_date, status, paid_principal_amount, paid_interest_amount)",
+        "id, owner_id, client_id, type, status, principal_amount, late_interest_rate_percent_per_day, periodicity, client:clients(name), installments(id, number, amount, due_date, status, paid_principal_amount, paid_interest_amount)",
       )
       .eq("id", contractId)
       .single(),
@@ -1129,7 +1136,7 @@ export async function payDownContractBalance(contractId: string, input: SettleCo
     supabase
       .from("contracts")
       .select(
-        "id, owner_id, client_id, type, status, principal_amount, late_interest_rate_percent_per_day, client:clients(name), installments(id, number, amount, due_date, status, paid_principal_amount, paid_interest_amount)",
+        "id, owner_id, client_id, type, status, principal_amount, late_interest_rate_percent_per_day, periodicity, client:clients(name), installments(id, number, amount, due_date, status, paid_principal_amount, paid_interest_amount)",
       )
       .eq("id", contractId)
       .single(),
@@ -1722,7 +1729,8 @@ export async function updateContractPeriodicity(
   if (contract.type === "venda_iphone" && reflowed.length > 0) {
     const lastDueDate = reflowed.reduce((latest, r) => (r.due_date > latest ? r.due_date : latest), reflowed[0].due_date);
     const spanDays = Math.round(
-      (parseISO(lastDueDate).getTime() - parseISO(contract.first_due_date).getTime()) / 86_400_000,
+      (parseISO(lastDueDate).getTime() - parseISO(firstChargeDate(contract.first_due_date, data.periodicity)).getTime()) /
+        86_400_000,
     );
     if (spanDays >= PRODUCT_SALE_MAX_WEEKS * 7) {
       return {

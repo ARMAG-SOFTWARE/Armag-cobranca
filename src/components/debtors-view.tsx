@@ -283,6 +283,7 @@ export function DebtorsView({
                                 installment={row.installment}
                                 lateInterestRatePercentPerDay={row.contract.late_interest_rate_percent_per_day}
                                 contractPrincipalAmount={row.contract.principal_amount}
+                                contractPeriodicity={row.contract.periodicity}
                                 triggerLabel="Marcar como pago"
                                 clientName={debtor.client.name}
                                 onPaid={() => router.refresh()}

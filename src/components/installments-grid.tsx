@@ -49,6 +49,7 @@ function InstallmentRow({
       ? calculateLateInterest({
           lateInterestRatePercentPerDay: contract.late_interest_rate_percent_per_day,
           originalPrincipalAmount: contract.principal_amount,
+          periodicity: contract.periodicity,
           dueDate: installment.due_date,
           status: installment.status,
           paidInterestAmount: installment.paid_interest_amount,
@@ -109,6 +110,7 @@ function InstallmentRow({
             installment={installment}
             lateInterestRatePercentPerDay={contract.late_interest_rate_percent_per_day}
             contractPrincipalAmount={contract.principal_amount}
+            contractPeriodicity={contract.periodicity}
             onPaid={() => router.refresh()}
           />
         )}

@@ -10,10 +10,10 @@ import type { ContractType, InstallmentStatus, Periodicity } from "@/lib/types";
  * cada cadastro (`contracts.interest_rate_percent`, sugestão de 7,5% por
  * semana). O percentual total é taxa semanal × duração do contrato em
  * semanas, e a duração vem da periodicidade de cada parcela
- * (`WEEKS_PER_INSTALLMENT`): diária = 1/7 de semana (7,5% ÷ 7 por dia),
- * semanal = 1, quinzenal = 2, mensal = 4 (um mês = 30% com 7,5%/semana).
- * Ex.: 4 semanais = 30%; 28 diárias = 30%; 2 quinzenais = 30%; 1 mensal =
- * 30%. Esse percentual é aplicado UMA ÚNICA VEZ sobre o valor emprestado e o
+ * (`WEEKS_PER_INSTALLMENT`): diária = 1/6 de semana (cobrança de segunda a
+ * sábado: 7,5% ÷ 6 por parcela), semanal = 1, quinzenal = 2, mensal = 4 (um
+ * mês = 30% com 7,5%/semana). Ex.: 4 semanais = 30%; 24 diárias = 30%; 2
+ * quinzenais = 30%; 1 mensal = 30%. Esse percentual é aplicado UMA ÚNICA VEZ sobre o valor emprestado e o
  * total é dividido igualmente entre as parcelas — nunca recalculado depois
  * de salvo.
  *
@@ -27,7 +27,8 @@ import type { ContractType, InstallmentStatus, Periodicity } from "@/lib/types";
  * (`contracts.late_interest_rate_percent_per_day`) — mudar a configuração
  * depois nunca altera contratos já existentes. Nunca é somado ao juros
  * contratual na mesma fórmula; só incide se a parcela não for paga no
- * vencimento.
+ * vencimento. Na periodicidade diária (cobrança de segunda a sábado) o
+ * domingo não conta como dia de atraso.
  */
 export const DEFAULT_LOAN_INTEREST_RATE_PERCENT = 7.5;
 export const DEFAULT_PRODUCT_INTEREST_RATE_PERCENT = 20;
@@ -35,7 +36,8 @@ export const DEFAULT_LATE_INTEREST_RATE_PERCENT_PER_DAY = 1;
 
 /** Quantas semanas cada parcela representa, por periodicidade. */
 export const WEEKS_PER_INSTALLMENT: Record<Periodicity, number> = {
-  diaria: 1 / 7,
+  // Segunda a sábado: 6 parcelas diárias por semana.
+  diaria: 1 / 6,
   semanal: 1,
   quinzenal: 2,
   mensal: 4,
@@ -138,6 +140,28 @@ export function daysLate(dueDate: string, referenceDate: Date = new Date()): num
   return Math.max(daysBetweenDateStrings(dueDate, todayStr), 0);
 }
 
+/**
+ * Dias de atraso que geram juros. Na diária (cobrança de segunda a sábado)
+ * os domingos entre o vencimento e a data de referência não contam; nas
+ * demais periodicidades é igual a `daysLate` (dias corridos).
+ */
+export function chargeableLateDays(
+  dueDate: string,
+  periodicity: Periodicity,
+  referenceDate: Date = new Date(),
+): number {
+  const days = daysLate(dueDate, referenceDate);
+  if (periodicity !== "diaria" || days <= 0) return days;
+
+  const [year, month, day] = dueDate.split("-").map(Number);
+  const dueWeekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  // Domingos em (vencimento, hoje]: o 1º domingo depois do vencimento cai
+  // em `firstSundayOffset` dias; daí em diante, um a cada 7.
+  const firstSundayOffset = 7 - dueWeekday;
+  const sundays = days >= firstSundayOffset ? Math.floor((days - firstSundayOffset) / 7) + 1 : 0;
+  return days - sundays;
+}
+
 export interface LateInterestInstallmentInput {
   /**
    * Percentual de juros de atraso POR DIA gravado no contrato no cadastro
@@ -151,6 +175,8 @@ export interface LateInterestInstallmentInput {
    * parcela, nem o saldo em aberto dela.
    */
   originalPrincipalAmount: number;
+  /** Periodicidade do contrato — na diária, domingo não conta como dia de atraso. */
+  periodicity: Periodicity;
   dueDate: string;
   status: InstallmentStatus;
   /**
@@ -188,7 +214,7 @@ export function calculateLateInterest(
   const ratePerDay = Math.max(installment.lateInterestRatePercentPerDay, 0) / 100;
   if (ratePerDay === 0) return 0;
 
-  const days = daysLate(installment.dueDate, referenceDate);
+  const days = chargeableLateDays(installment.dueDate, installment.periodicity, referenceDate);
   if (days <= 0) return 0;
 
   const grossInterest = roundCents(installment.originalPrincipalAmount * ratePerDay * days);
