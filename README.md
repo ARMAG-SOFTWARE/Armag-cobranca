@@ -33,7 +33,6 @@ das diferenças em relação ao original está em [`ADAPTACOES.md`](./ADAPTACOES
 | Abatimento parcial | Um valor recebido de uma vez é aplicado nas parcelas em aberto, da mais antiga para a mais nova, sem perdoar nada (diferente da quitação total, que encerra a dívida). |
 | Renovação de parcela | Paga só o juros de atraso pendente e empurra o vencimento 1 período (inclusive 1 dia, na diária); o principal continua em aberto. |
 | Estorno de pagamento | No histórico do contrato, "Estornar" desfaz o pagamento mais recente de uma parcela (valor volta a ficar em aberto). Entrada, quitação total e renovação não são estornáveis. |
-| Despesas | Tela própria no menu para listar, editar e excluir saídas. |
 | Clientes encerrados | Aba "Encerrados" em Clientes com contratos quitados e cancelados. |
 | Esqueci minha senha | Link na tela de login; o usuário recebe um e-mail e cria a nova senha. |
 | Editar periodicidade | Reencaixa só as datas das parcelas em aberto (parcelas com pagamento nunca mudam). O valor combinado do contrato não muda; em pods, a nova agenda ainda precisa caber em 4 semanas. |
