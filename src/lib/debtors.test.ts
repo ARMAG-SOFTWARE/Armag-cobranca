@@ -144,4 +144,20 @@ describe("getTodayDebtors", () => {
     expect(debtors[0].rows[0].isOverdue).toBe(false);
     expect(debtors[0].rows[0].interestOwed).toBe(0);
   });
+
+  it("pagamento de contrato cancelado não conta em 'Recebido hoje'", async () => {
+    const now = new Date().toISOString();
+    const payments = [
+      { installment_id: "i1", principal_amount: 100, interest_amount: 0, method: "pix", paid_at: now, created_by_email: null,
+        contract: { status: "ativo" }, installment: { number: 1, status: "pago", contract: { installments_count: 4 } }, client: { name: "Ana" } },
+      { installment_id: "i2", principal_amount: 250, interest_amount: 0, method: "pix", paid_at: now, created_by_email: null,
+        contract: { status: "cancelado" }, installment: { number: 1, status: "pago", contract: { installments_count: 4 } }, client: { name: "Beto" } },
+    ];
+
+    const { summary, paidToday } = await getTodayDebtors(mockSupabase([], payments));
+
+    expect(summary.receivedToday).toBe(100);
+    expect(paidToday).toHaveLength(1);
+  });
 });
+

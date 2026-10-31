@@ -139,4 +139,25 @@ describe("computeDashboardMetrics — quitação total/abatimento (is_settlement
 
     expect(metrics.earnings.total).toBe(12);
   });
+
+  it("contrato cancelado não conta como recebido no mês nem no caixa", () => {
+    const today = new Date().toISOString();
+    const active = contract({ id: "ativo", disbursed_at: "2026-01-01" });
+    const cancelled = contract({ id: "cancelado", status: "cancelado", disbursed_at: "2026-01-01" });
+    const metrics = computeDashboardMetrics(
+      [active, cancelled],
+      [
+        payment({ id: "p1", contract_id: "ativo", installment_id: "i1", principal_amount: 100, paid_at: today }),
+        payment({ id: "p2", contract_id: "cancelado", installment_id: "i2", principal_amount: 250, paid_at: today }),
+      ],
+      [],
+      [],
+    );
+
+    expect(metrics.income.month).toBe(100);
+    expect(metrics.income.total).toBe(100);
+    expect(metrics.receivedByMethod.pix).toBe(100);
+    // Só o empréstimo ativo debita a saída do caixa geral.
+    expect(metrics.generalCash.loansDisbursed).toBe(1000);
+  });
 });

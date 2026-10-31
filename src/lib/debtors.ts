@@ -128,7 +128,7 @@ export async function getTodayDebtors(
     supabase
       .from("payments")
       .select(
-        "installment_id, principal_amount, interest_amount, method, paid_at, created_by_email, installment:installments(number, status, contract:contracts(installments_count)), client:clients(name)",
+        "installment_id, principal_amount, interest_amount, method, paid_at, created_by_email, contract:contracts(status), installment:installments(number, status, contract:contracts(installments_count)), client:clients(name)",
       )
       .not("installment_id", "is", null)
       .gte("paid_at", dayStart.toISOString())
@@ -232,9 +232,13 @@ export async function getTodayDebtors(
     paid_at: string;
     created_by_email: string | null;
     client: { name: string } | null;
+    contract: { status: string } | null;
     installment: { number: number; status: string; contract: { installments_count: number } | null } | null;
   };
-  const paymentsToday = (paymentsTodayData ?? []) as unknown as PaymentTodayRow[];
+  // Pagamento de contrato cancelado não conta como recebido (mesma regra do painel).
+  const paymentsToday = ((paymentsTodayData ?? []) as unknown as PaymentTodayRow[]).filter(
+    (payment) => payment.contract?.status !== "cancelado",
+  );
 
   const paidToday: PaidTodayRow[] = paymentsToday.map((payment) => ({
     clientName: payment.client?.name ?? "—",

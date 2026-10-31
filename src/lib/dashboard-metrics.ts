@@ -174,10 +174,10 @@ export function computeDashboardMetrics(
     })),
   );
 
-  // Um empréstimo cancelado (ex.: cadastrado errado e excluído) nunca deve
-  // continuar contando nos indicadores de empréstimos — o histórico de
-  // pagamentos já recebidos permanece intocado (ver `income`/`earnings`
-  // abaixo, que somam todos os `payments` sem filtrar por status do contrato).
+  // Um contrato cancelado (ex.: cadastrado errado e excluído) não conta em
+  // nenhum indicador do painel — nem empréstimos, nem recebimentos, nem
+  // caixa. Os pagamentos dele continuam gravados e visíveis no histórico
+  // do próprio contrato.
   const contracts = allContracts.filter((c) => c.status !== "cancelado");
   const activeContractIds = new Set(contracts.map((c) => c.id));
   const contractsById = new Map(contracts.map((c) => [c.id, c]));
@@ -204,19 +204,17 @@ export function computeDashboardMetrics(
 
   // Débito automático do saldo geral: só o que já saiu de fato da conta
   // (`disbursed_at` preenchido) debita agora — "ainda vai sair" fica de
-  // fora até o usuário confirmar a data real da saída. Usa `allContracts`
-  // (não o `contracts` filtrado acima) de propósito: um empréstimo
-  // cancelado só existe cancelado porque já tinha pagamento registrado (ver
-  // `deleteContract`), ou seja, o dinheiro realmente saiu antes de o
-  // contrato ser cancelado — continua contando aqui, só não entra mais nos
-  // indicadores de empréstimo ativo.
+  // fora até o usuário confirmar a data real da saída. Contrato cancelado
+  // é tratado como operação desfeita: não debita a saída nem soma os
+  // recebimentos (ver o laço de pagamentos abaixo), mantendo o caixa
+  // coerente.
   let loansDisbursed = 0;
   let loansPendingDisbursement = 0;
-  for (const contract of allContracts) {
+  for (const contract of contracts) {
     if (contract.type !== "emprestimo") continue;
     if (contract.disbursed_at) {
       loansDisbursed = roundCents(loansDisbursed + contract.principal_amount);
-    } else if (contract.status !== "cancelado") {
+    } else {
       loansPendingDisbursement = roundCents(loansPendingDisbursement + contract.principal_amount);
     }
   }
@@ -239,6 +237,11 @@ export function computeDashboardMetrics(
   const receivedByContract = new Map<string, number>();
 
   for (const payment of payments) {
+    // Pagamento de contrato cancelado não conta em nenhum indicador
+    // (recebido no mês, entradas, ganhos, juros, caixa): o cancelamento
+    // desfaz a operação no painel. Continua visível no histórico do contrato.
+    if (!activeContractIds.has(payment.contract_id)) continue;
+
     const paidAt = new Date(payment.paid_at);
     const total = roundCents(payment.principal_amount + payment.interest_amount);
 
@@ -260,9 +263,7 @@ export function computeDashboardMetrics(
     const earnedFromPrincipal = roundCents(payment.principal_amount * markupRatio);
     addToPeriod(earnings, roundCents(earnedFromPrincipal + payment.interest_amount), paidAt, boundaries);
 
-    if (activeContractIds.has(payment.contract_id)) {
-      receivedByContract.set(payment.contract_id, roundCents((receivedByContract.get(payment.contract_id) ?? 0) + total));
-    }
+    receivedByContract.set(payment.contract_id, roundCents((receivedByContract.get(payment.contract_id) ?? 0) + total));
   }
 
   const expensesPeriod = emptyPeriod();
