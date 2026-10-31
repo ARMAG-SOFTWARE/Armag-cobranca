@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { optionalNumber } from "@/lib/utils";
 import type { IphoneSale } from "@/lib/iphone-sales";
 import { iphoneSaleUpdateSchema, type IphoneSaleUpdateInput } from "@/lib/validations";
 import { updateIphoneSale } from "@/app/actions";
@@ -96,14 +97,14 @@ export function IphoneSaleEditDialog({ sale }: { sale: IphoneSale }) {
               <Input id="color" placeholder="Ex: Titânio Natural" {...register("color")} />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="batteryPercent">Saúde da bateria (%)</Label>
+              <Label htmlFor="batteryPercent">Saúde da bateria % (opcional)</Label>
               <Input
                 id="batteryPercent"
                 type="number"
                 min="0"
                 max="100"
                 placeholder="Ex: 92"
-                {...register("batteryPercent", { valueAsNumber: true })}
+                {...register("batteryPercent", { setValueAs: optionalNumber })}
               />
               {errors.batteryPercent && <p className="text-xs text-destructive">{errors.batteryPercent.message}</p>}
             </div>

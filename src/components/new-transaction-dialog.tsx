@@ -33,7 +33,7 @@ import {
   PRODUCT_SALE_MAX_WEEKS,
   WEEKS_PER_INSTALLMENT,
 } from "@/lib/financial-rules";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, optionalNumber } from "@/lib/utils";
 import { PAYMENT_METHOD_LABELS } from "@/lib/types";
 import { transactionSchema, type TransactionInput } from "@/lib/validations";
 import { createTransaction } from "@/app/actions";
@@ -296,7 +296,7 @@ export function NewTransactionDialog() {
                     min="0"
                     max="100"
                     placeholder="Ex: 87"
-                    {...register("phoneBatteryPercent", { valueAsNumber: true })}
+                    {...register("phoneBatteryPercent", { setValueAs: optionalNumber })}
                   />
                   {errors.phoneBatteryPercent && (
                     <p className="text-xs text-destructive">{errors.phoneBatteryPercent.message}</p>

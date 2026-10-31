@@ -72,6 +72,17 @@ export function maskCep(value: string) {
   return digits.length <= 5 ? digits : `${digits.slice(0, 5)}-${digits.slice(5)}`;
 }
 
+/**
+ * Para campos numéricos OPCIONAIS do formulário (`register(..., { setValueAs })`):
+ * campo vazio vira `undefined` ("não informado"), em vez do NaN que
+ * `valueAsNumber` produz e que a validação recusa.
+ */
+export function optionalNumber(value: unknown): number | undefined {
+  if (value === "" || value === null || value === undefined) return undefined;
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isNaN(number) ? undefined : number;
+}
+
 export function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
 }

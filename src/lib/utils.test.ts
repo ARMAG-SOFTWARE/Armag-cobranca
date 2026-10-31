@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatPhone, maskCep, maskPhone } from "@/lib/utils";
+import { formatPhone, maskCep, maskPhone, optionalNumber } from "@/lib/utils";
 
 describe("maskPhone (enquanto digita)", () => {
   it.each([
@@ -35,5 +35,20 @@ describe("formatPhone (exibição)", () => {
     expect(formatPhone("11912345678")).toBe("(11) 91234-5678");
     expect(formatPhone("1112345678")).toBe("(11) 1234-5678");
     expect(formatPhone("5511912345678")).toBe("+55 (11) 91234-5678");
+  });
+});
+
+describe("optionalNumber (campo numérico opcional, ex.: saúde da bateria)", () => {
+  it("campo vazio vira undefined (não informado)", () => {
+    expect(optionalNumber("")).toBeUndefined();
+    expect(optionalNumber(undefined)).toBeUndefined();
+    expect(optionalNumber(null)).toBeUndefined();
+    expect(optionalNumber(Number.NaN)).toBeUndefined();
+  });
+
+  it("número digitado vira número", () => {
+    expect(optionalNumber("85")).toBe(85);
+    expect(optionalNumber(0)).toBe(0);
+    expect(optionalNumber("0")).toBe(0);
   });
 });
